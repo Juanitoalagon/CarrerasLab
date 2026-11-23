@@ -160,7 +160,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 .ac-card{background:#0f1217;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
 .ac-card h3{margin:0 0 8px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
 .ac-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.stg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.stg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
 .stg div{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;color:var(--mut)}
 .stg div b{display:block;color:var(--text);font-size:12px;margin-bottom:2px}
 .stg div.on{border-color:var(--acc);background:#ff2e8814}
@@ -1211,7 +1211,7 @@ body.focus #hudList .hg{min-width:30px!important;font-size:10px!important;letter
 <body>
 <div id="app">
   <header>
-    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.13.1 · FASE 13</small></div>
+    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.14 · FASE 14</small></div>
     <button class="btn" id="btnMenu" title="Menú: todas las opciones">☰<span class="long"> Menú</span></button>
     <div id="raceinfo">
       <div class="lap"><span id="lapLbl">VUELTA</span> <b id="lapNow">–</b><span>/<b id="lapTot">–</b></span></div>
@@ -4432,7 +4432,7 @@ function randomWeights(rng) {
 
 // ---------------- Recompensa según personalidad ----------------
 const RISK_V = 2; // v0.9.3: el riesgo parte del carácter y la red solo lo ajusta (se reinicia esa salida en redes anteriores)
-const REWARD_V = 9; // v1.13: la gestión pesa menos (×0,4) y ganar al compañero más; v1.6.12: + gestión (batería en las peleas, gomas, no regalar posiciones); las de la v7 siguen sin reiniciarse
+const REWARD_V = 10; // v1.14: en las etapas 3 y 4 cuenta también el tiempo (respecto al mediano y al compañero rival) · v1.13: v1.13: la gestión pesa menos (×0,4) y ganar al compañero más; v1.6.12: + gestión (batería en las peleas, gomas, no regalar posiciones); las de la v7 siguen sin reiniciarse
 const REWARD_V_RESET = 6; // solo las redes de antes de esta versión reinician la parte de atacar y defender
 // // v0.8.4: cada piloto ataca y defiende más o menos lo que marca su carácter (la red elige CUÁNDO, no cuánto)
 // Lo que "le importa" a cada piloto. Los agresivos valoran más ganar puestos y les
@@ -4499,8 +4499,19 @@ const STAGES = [
   null,
   { n: 1, name: 'Rivales previsibles', desc: 'La red lleva a 2 pilotos contra 6 con reglas fijas. Los choques castigan poco.', ctrl: 2, until: 12 },
   { n: 2, name: 'Parrilla completa', desc: 'La red lleva a 4 pilotos. Los choques y las salidas castigan de verdad.', ctrl: 4, until: 30 },
-  { n: 3, name: 'Contra cerebros entrenados', desc: 'La red corre contra la mejor versión anterior de sí misma. Aprenden a pelear contra rivales que también piensan.', ctrl: 4, until: Infinity },
+  // v1.14: a partir de aquí ya no se mueve toda la red a la vez (con ~1.900 números, la suerte de las carreras tapaba lo que
+  // funcionaba y la red daba tumbos): se alternan 20 generaciones de tendencias y 20 de afinar la última capa
+  { n: 3, name: 'Tendencias', desc: 'Contra versiones anteriores de sí misma y contra las reglas. Solo se ajustan las 19 tendencias (cuánto ataca, batería, gomas, cuándo parar…): pocas cosas a la vez, así se nota qué funciona.', ctrl: 4, until: Infinity, mask: 'tend', sigma: 0.3, lr: 0.08 },
+  { n: 4, name: 'Afinar', desc: 'Igual, pero se ajusta la última capa: cómo reacciona a cada situación. Aquí es donde más aprende. El carácter de cada piloto (la parte de dentro) no se toca.', ctrl: 4, until: Infinity, mask: 'afin', sigma: 0.15, lr: 0.03 },
 ];
+// generaciones de cada etapa antes de cambiar a la otra (3 ⇄ 4). En la prueba grande, afinar la última capa dio
+// la señal más clara; las tendencias, algo menos: por eso 10 de tendencias y 20 de afinar
+const PHASE_GENS = { tend: 10, afin: 20 }, CYCLE = PHASE_GENS.tend + PHASE_GENS.afin;
+// qué números de la red se entrenan en cada etapa: [desde, hasta)
+function maskRange(mask) {
+  const o0 = NET.IN * NET.H + NET.H, ob = o0 + NET.H * NET.OUT;
+  return mask === 'tend' ? [ob, ob + NET.OUT] : mask === 'afin' ? [o0, ob + NET.OUT] : [0, NET.SIZE];
+}
 
 // ---------------- Una carrera de práctica (la usa el entrenador y, en paralelo, los núcleos ayudantes) ----------------
 function jobRace(T, entries, sc, w, oppBrain, free, laps) {
@@ -4518,6 +4529,22 @@ function jobFit(r, sc, stageN, entries) {
   }
   let f = 0;
   for (const x of res) if (sc.ctrl.includes(x.id)) f += reward(x, byDriver, stageN, E[x.id].driver.stats, E[x.id].driver.rasgos);
+  // v1.14 (etapas 3 y 4): además del puesto, el TIEMPO. El puesto va a saltos y depende mucho de la suerte; el tiempo
+  // (respecto al coche mediano y respecto al compañero que lleva el rival) cambia poco a poco y deja ver qué variante va mejor
+  if (stageN >= 3) {
+    const fin = res.filter((x) => x.time !== null && x.time !== undefined && !x.lapsDown).map((x) => x.time).sort((a, b) => a - b);
+    if (fin.length >= 2) {
+      const med = fin[Math.floor(fin.length / 2)], lapT = med / Math.max(1, sc.laps || 1);
+      const tt = (y) => (y.dnf ? med + 2 * lapT : (y.time ?? med) + (y.lapsDown || 0) * lapT);
+      for (const x of res) {
+        if (!sc.ctrl.includes(x.id)) continue;
+        const tg = (tt(x) - med) / lapT;
+        f += 2 * -clamp(tg, -1.5, 2);
+        const mate = res.find((y) => y.id !== x.id && E[y.id].team.id === E[x.id].team.id);
+        if (mate && !sc.ctrl.includes(mate.id)) f += 2 * -clamp(tg - (tt(mate) - med) / lapT, -1, 1);
+      }
+    }
+  }
   return f / sc.ctrl.length;
 }
 // trabajo enviado a un núcleo ayudante: todo lo necesario para correr la carrera sin el entrenador
@@ -4549,7 +4576,7 @@ class Trainer {
   reset() {
     this.pendingReset = false; this.headsReset = false;
     this.gen = 0; this.racesRun = 0; this.trainSecs = 0; this.free = 1; this.stage0 = 1; this.parent = null;
-    this.history = []; this.profile = null;
+    this.history = []; this.profile = null; this.cyc0 = null; this.lastMask = null; this.pt = 0;
     this.theta = randomWeights(this.rng);
     this.champion = Float32Array.from(this.theta);
     this.gen1 = Float32Array.from(this.theta);
@@ -4563,15 +4590,33 @@ class Trainer {
   stage() {
     const g = this.gen + 1;
     // una red que empieza en G0 a partir de otra ya entrenada no vuelve a las etapas fáciles
-    for (let i = Math.max(1, this.stage0 || 1); i < STAGES.length; i++) if (g <= STAGES[i].until || i === 3) return STAGES[i];
-    return STAGES[3];
+    for (let i = Math.max(1, this.stage0 || 1); i <= 2; i++) if (g <= STAGES[i].until) return STAGES[i];
+    // etapas 3 y 4, alternando cada PHASE_GENS generaciones (las redes de antes empiezan por las tendencias)
+    if (this.cyc0 === null || this.cyc0 === undefined || this.cyc0 > this.gen) this.cyc0 = this.gen - (this.gen % 10); // en múltiplos de 10: cada cambio de etapa coincide con un examen
+    return (g - 1 - this.cyc0) % CYCLE < PHASE_GENS.tend ? STAGES[3] : STAGES[4];
   }
+  // generaciones que quedan para cambiar de etapa (3 ⇄ 4)
+  phaseLeft() { const st = this.stage(); if (!st.mask) return null; const k = (this.gen - this.cyc0) % CYCLE; return st.mask === 'tend' ? PHASE_GENS.tend - k : CYCLE - k; }
+  // ¿la generación g cierra una etapa 3 o 4? Devuelve la etapa que se cierra ('tend' o 'afin')
+  phaseEndAt(g) {
+    if (this.cyc0 === null || this.cyc0 === undefined || g <= this.cyc0) return null;
+    const k = (g - this.cyc0) % CYCLE;
+    return k === PHASE_GENS.tend ? 'tend' : k === 0 ? 'afin' : null;
+  }
+  // empezar ya una etapa concreta (tras volver a la mejor versión: se sigue con la siguiente)
+  startPhase(mask) { this.cyc0 = this.gen - (mask === 'afin' ? PHASE_GENS.tend : 0); this.startGen(); }
 
   gauss() { let u = 0; while (u === 0) u = this.rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * this.rng()); }
 
   startGen() {
     const st = this.stage();
     const n = this.entries.length;
+    // al entrar en una etapa 3 o 4, la memoria del optimizador de esa parte empieza limpia (otra escala de pasos)
+    if (st.mask && this.lastMask !== st.mask) {
+      const [a, b] = maskRange(st.mask);
+      for (let j = a; j < b; j++) { this.m[j] = 0; this.v[j] = 0; }
+      this.lastMask = st.mask; this.pt = 0;
+    } else if (!st.mask) this.lastMask = null;
     this.scen = [];
     for (let k = 0; k < this.o.races; k++) {
       const seed = (this.rng() * 2 ** 31) >>> 0;
@@ -4611,16 +4656,17 @@ class Trainer {
       this.scen.push(sc);
     }
     this.eps = [];
+    const [ma, mb] = maskRange(st.mask), sig = st.sigma || this.o.sigma;
     for (let i = 0; i < this.o.pairs; i++) {
       const e = new Float32Array(NET.SIZE);
-      for (let j = 0; j < e.length; j++) e[j] = this.gauss();
+      for (let j = ma; j < mb; j++) e[j] = this.gauss();
       this.eps.push(e);
     }
-    // candidatos: theta + sigma*eps y theta - sigma*eps
+    // candidatos: theta + sigma*eps y theta - sigma*eps (en las etapas 3 y 4, solo cambia la parte que toca)
     this.pop = [];
     for (let i = 0; i < this.o.pairs; i++) for (const sg of [1, -1]) {
       const w = new Float32Array(NET.SIZE);
-      for (let j = 0; j < w.length; j++) w[j] = this.theta[j] + sg * this.o.sigma * this.eps[i][j];
+      for (let j = 0; j < w.length; j++) w[j] = this.theta[j] + sg * sig * this.eps[i][j];
       this.pop.push({ w, fit: 0, pair: i, sign: sg });
     }
     this.ci = 0; this.ki = 0; this.race = null;
@@ -4636,7 +4682,7 @@ class Trainer {
   // y la red aprendía a ir siempre a tope y vaciar la batería
   lapsFor(T) { return clamp(Math.round(9000 / T.L), 2, 4); }
   makeRace(ind, sc, oppBrain) { return jobRace(sc.T || this.T, this.entries, sc, ind.w, oppBrain, this.free, this.o.laps); }
-  oppW(sc) { const lg = this.league || []; return this.stage().n === 3 && this.rival && sc.oppK !== -2 ? (sc.oppK >= 0 && lg[sc.oppK] ? lg[sc.oppK].w : this.rival) : null; }
+  oppW(sc) { const lg = this.league || []; return this.stage().n >= 3 && this.rival && sc.oppK !== -2 ? (sc.oppK >= 0 && lg[sc.oppK] ? lg[sc.oppK].w : this.rival) : null; }
 
   // En paralelo: las carreras de la generación se reparten entre los núcleos ayudantes y este mismo hilo.
   // Mismo resultado que tick() (las mismas carreras y la misma nota), solo que varias a la vez.
@@ -4695,7 +4741,7 @@ class Trainer {
         const st = this.stage();
         // etapa 3: contra el rival reciente o contra versiones pasadas (la «liga»), para no aprender trucos contra uno solo
         const sc0 = this.scen[this.ki], lg = this.league || [];
-        const opp = st.n === 3 && this.rival && sc0.oppK !== -2 ? makeNetBrain(sc0.oppK >= 0 && lg[sc0.oppK] ? lg[sc0.oppK].w : this.rival, null, this.free) : this.rule;
+        const opp = st.n >= 3 && this.rival && sc0.oppK !== -2 ? makeNetBrain(sc0.oppK >= 0 && lg[sc0.oppK] ? lg[sc0.oppK].w : this.rival, null, this.free) : this.rule;
         this.race = this.makeRace(this.pop[this.ci], this.scen[this.ki], opp);
       }
       const r = this.race;
@@ -4736,25 +4782,27 @@ class Trainer {
     const order = P.map((x, i) => i).sort((a, b) => zs[a] - zs[b]);
     const rank = new Float32Array(n);
     order.forEach((idx, r) => (rank[idx] = r / (n - 1) - 0.5));
+    const st = this.stage(), [ma, mb] = maskRange(st.mask);
     const g = new Float32Array(NET.SIZE);
     for (let i = 0; i < this.o.pairs; i++) {
       const plus = P.findIndex((x) => x.pair === i && x.sign === 1), minus = P.findIndex((x) => x.pair === i && x.sign === -1);
       const d = rank[plus] - rank[minus];
       const e = this.eps[i];
-      for (let j = 0; j < g.length; j++) g[j] += d * e[j];
+      for (let j = ma; j < mb; j++) g[j] += d * e[j];
     }
-    const scale = 1 / (this.o.pairs * this.o.sigma);
+    const scale = 1 / (this.o.pairs * (st.sigma || this.o.sigma));
     // Adam
-    // a partir de la generación 60 el paso se va acortando (hasta el 40 %): menos vaivén alrededor de lo ya aprendido
-    const b1 = 0.9, b2 = 0.999, t = this.gen + 1, lr = this.o.lr * (this.lrK ?? 1) * clamp(60 / Math.max(60, this.gen), 0.4, 1);
-    for (let j = 0; j < g.length; j++) {
+    // etapas 1 y 2 (toda la red): a partir de la generación 60 el paso se va acortando (hasta el 40 %)
+    // etapas 3 y 4: paso propio de cada parte, y la cuenta de Adam empieza en cada cambio de etapa
+    const b1 = 0.9, b2 = 0.999, t = st.mask ? (this.pt = (this.pt || 0) + 1) : this.gen + 1;
+    const lr = st.mask ? st.lr * (this.lrK ?? 1) : this.o.lr * (this.lrK ?? 1) * clamp(60 / Math.max(60, this.gen), 0.4, 1);
+    for (let j = ma; j < mb; j++) {
       const gj = g[j] * scale - 0.002 * this.theta[j];
       this.m[j] = b1 * this.m[j] + (1 - b1) * gj;
       this.v[j] = b2 * this.v[j] + (1 - b2) * gj * gj;
       const mh = this.m[j] / (1 - Math.pow(b1, t)), vh = this.v[j] / (1 - Math.pow(b2, t));
       this.theta[j] += lr * mh / (Math.sqrt(vh) + 1e-8);
     }
-    const st = this.stage();
     this.gen++;
     if (this.free < 1) this.free = Math.min(1, +(this.free + 0.02).toFixed(2)); // las redes de antes van ganando libertad poco a poco
     this.history.push({ rv: REWARD_V, g: this.gen, best, mean, stage: st.n });
@@ -4837,7 +4885,7 @@ class Trainer {
     const r6 = (w) => (w ? Array.from(w, (v) => +v.toPrecision(4)) : null);
     return {
       version: 2, trainV: TRAIN_V, rewardV: this.pendingReset ? this.loadedRewardV : REWARD_V, riskV: RISK_V, net: { IN: NET.IN, H: NET.H, OUT: NET.OUT },
-      gen: this.gen, racesRun: this.racesRun, trainSecs: Math.round(this.trainSecs), confirms: this.confirms || 0, rejects: this.rejects || 0, free: this.free, stage0: this.stage0 || 1, parent: this.parent || null, lrK: this.lrK ?? 1,
+      gen: this.gen, racesRun: this.racesRun, trainSecs: Math.round(this.trainSecs), confirms: this.confirms || 0, rejects: this.rejects || 0, free: this.free, stage0: this.stage0 || 1, parent: this.parent || null, lrK: this.lrK ?? 1, cyc0: this.cyc0 ?? null, lastMask: this.lastMask || null, pt: this.pt || 0,
       history: this.history.map((h) => ({ g: h.g, best: +h.best.toFixed(3), mean: +h.mean.toFixed(3), stage: h.stage })),
       theta: r4(this.theta), gen1: r4(this.gen1), rival: r4(this.rival), league: (this.league || []).map((x) => ({ g: x.g, w: r4(x.w) })), profile: this.profile,
       adam: { m: r6(this.m), v: r6(this.v) },
@@ -4846,7 +4894,7 @@ class Trainer {
 
   load(d) {
     if (!netOK(d)) return false;
-    this.gen = d.gen || 0; this.racesRun = d.racesRun || 0; this.trainSecs = d.trainSecs || 0; this.confirms = d.confirms || 0; this.rejects = d.rejects || 0; this.free = d.free ?? ((d.gen || 0) > 0 ? 0 : 1); this.stage0 = d.stage0 || 1; this.parent = d.parent || null; this.lrK = d.lrK ?? 1;
+    this.gen = d.gen || 0; this.racesRun = d.racesRun || 0; this.trainSecs = d.trainSecs || 0; this.confirms = d.confirms || 0; this.rejects = d.rejects || 0; this.free = d.free ?? ((d.gen || 0) > 0 ? 0 : 1); this.stage0 = d.stage0 || 1; this.parent = d.parent || null; this.lrK = d.lrK ?? 1; this.cyc0 = d.cyc0 ?? null; this.lastMask = d.lastMask || null; this.pt = d.pt || 0;
     this.loadedRewardV = d.rewardV || 1;
     this.oldReward = this.loadedRewardV < REWARD_V_RESET && this.gen > 0;
     this.history = d.history || [];
@@ -5235,7 +5283,7 @@ class Realism {
     return out;
   }
 }
-const NEURAL = { notaOf, setRewardGest, runJob, Realism, F1_REF, OUT_NAMES, PROFILES, Exam, EXAM_CATS, TRAIN_CATS, upgradeWeights, expandWeights, netOK, RISK_V, charBase, NET, INPUT_NAMES, STAGES, makeNetBrain, randomWeights, reward, Trainer, encode, StratTrainer, STYLE_NAME, STYLE_Z, jefeShift, applyJefe, jefeSim };
+const NEURAL = { PHASE_GENS, CYCLE, maskRange, notaOf, setRewardGest, runJob, Realism, F1_REF, OUT_NAMES, PROFILES, Exam, EXAM_CATS, TRAIN_CATS, upgradeWeights, expandWeights, netOK, RISK_V, charBase, NET, INPUT_NAMES, STAGES, makeNetBrain, randomWeights, reward, Trainer, encode, StratTrainer, STYLE_NAME, STYLE_Z, jefeShift, applyJefe, jefeSim };
 if (typeof module !== 'undefined' && module.exports) module.exports = NEURAL;
 else global.NEURAL = NEURAL;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -11093,16 +11141,18 @@ function renderAcademy(full) {
   if ($('#acCores')) $('#acCores').textContent = S.settings.cores === 'uno' ? '🐢 1 núcleo' : `${S.settings.cores === 'todos' ? '⚡' : '🌡'} ${1 + helperCount()} ${helperCount() ? 'núcleos' : 'núcleo'}`;
   $('#acRun').textContent = S.training ? '❚❚ Pausar entrenamiento' : (tr.gen ? '▶ Seguir entrenando' : '▶ Empezar a entrenar');
   const progress = tr.pop ? Math.round(((tr.ci * tr.scen.length + tr.ki) / (tr.pop.length * tr.scen.length)) * 100) : 0;
-  $('#acStatus').innerHTML = `Etapa ${st.n}: <b>${st.name}</b> · ${tr.racesRun.toLocaleString('es-ES')} carreras de práctica · ${fmtDur(tr.trainSecs)} entrenando` +
+  $('#acStatus').innerHTML = `Etapa ${st.n}: <b>${st.name}</b>${st.mask && tr.phaseLeft ? ` (${tr.phaseLeft()} gen. para ${st.n === 3 ? 'afinar' : 'volver a las tendencias'})` : ''} · ${tr.racesRun.toLocaleString('es-ES')} carreras de práctica · ${fmtDur(tr.trainSecs)} entrenando` +
     (S.training ? ` · generación ${tr.gen + 1} al ${progress}%` : '') +
     (tr.gen < 10 ? '<br>Las diferencias empiezan a notarse a partir de unas 20–30 generaciones (unos 10 minutos en un ordenador).' : '') +
     (tr.pendingReset ? '<br><b style="color:var(--warn,#ffcf70)">Esta red se entrenó con las reglas de antes. Tal cual sirve para correr y para compararla con otras. Si la vuelves a entrenar, se reinicia la parte de atacar y defender (lo demás se conserva). Si la quieres guardar como estaba, crea una red nueva con «＋ Nueva» y entrena esa.</b>' : '') +
     (tr.headsReset ? '<br><b style="color:var(--good,#7be07b)">He reiniciado solo la parte de la red que decide cuándo atacar y defender: con el tiempo se había ido apartando del carácter de cada piloto. Ahora la Academia premia que cada uno ataque y defienda más o menos lo que le corresponde. Lo demás (riesgo, trazadas) se conserva: sigue entrenando unas generaciones y vuelve a medir.</b>' : '') +
     (tr.oldReward ? '<br><b style="color:var(--warn,#ffcf70)">Este cerebro se entrenó con las reglas antiguas, en las que atacar salía demasiado caro y aprendió a no atacar nunca. Te recomiendo «Empezar de cero».</b>' : '') +
     (!tr.oldReward && tr.profile && tr.gen >= 20 && Object.values(tr.profile).every((p) => p.att < 0.03) ? '<br><b style="color:var(--warn,#ffcf70)">Aviso: ahora mismo nadie ataca. Si sigue así tras unas cuantas generaciones más, empieza de cero.</b>' : '');
+  const left = tr.phaseLeft ? tr.phaseLeft() : null;
   $('#acStages').innerHTML = NEURAL.STAGES.slice(1).map((x) => {
-    const range = x.n === 1 ? `gen. 1–${x.until}` : x.n === 2 ? `gen. ${NEURAL.STAGES[1].until + 1}–${x.until}` : `gen. ${NEURAL.STAGES[2].until + 1} en adelante`;
-    return `<div class="${x.n === st.n ? 'on' : x.n < st.n ? 'done' : ''}"><b>${x.n}. ${x.name}</b>${range}<br>${x.desc}</div>`;
+    const range = x.n === 1 ? `gen. 1–${x.until}` : x.n === 2 ? `gen. ${NEURAL.STAGES[1].until + 1}–${x.until}` : x.n === st.n && left ? `quedan ${left} gen. para pasar a la ${x.n === 3 ? 4 : 3}` : `${NEURAL.PHASE_GENS[x.n === 3 ? 'tend' : 'afin']} gen. y cambia a la ${x.n === 3 ? 4 : 3}`;
+    const cls = x.n === st.n ? 'on' : x.n < st.n && !(st.n >= 3 && x.n >= 3) ? 'done' : '';
+    return `<div class="${cls}"><b>${x.n}. ${x.name}</b>${range}<br>${x.desc}</div>`;
   }).join('');
   const dis = !tr.ready;
   ['#acEx', '#acG1', '#acAnalyze'].forEach((q) => { $(q).disabled = dis; $(q).style.opacity = dis ? 0.4 : 1; });
@@ -11150,7 +11200,7 @@ function drawChart() {
   const X = (i) => pad.l + (i / (n - 1)) * (W - pad.l - pad.r);
   const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
   // bandas de etapa
-  const cols = { 1: 'rgba(255,255,255,0.02)', 2: 'rgba(41,199,255,0.05)', 3: 'rgba(255,46,136,0.06)' };
+  const cols = { 1: 'rgba(255,255,255,0.02)', 2: 'rgba(41,199,255,0.05)', 3: 'rgba(255,46,136,0.06)', 4: 'rgba(255,210,59,0.06)' };
   let i0 = 0;
   for (let i = 1; i <= hist.length; i++) {
     if (i === hist.length || hist[i].stage !== hist[i0].stage) {
@@ -11358,6 +11408,8 @@ function activeNet() { return S.nets ? S.nets.list.find((n) => n.id === S.nets.a
 function netGen(n) { return n.id === S.nets.active ? S.trainer.gen : (n.data && n.data.gen) || 0; }
 async function saveNets() { if (S.nets) await Store.save('redes.json', S.nets); }
 function trainPool() { return Object.values(DATA.TRACKS).filter((t) => t.real); }
+// v1.13.1: examen hecho antes de la nota nueva (versiones anteriores del juego): no se puede comparar con los de ahora
+function oldExam(n) { const e = (n.exams || []).filter((x) => !x.vs).pop(); return !!e && !e.notaP; }
 function newTrainer(data) { return new NEURAL.Trainer(getTrack('pruebas').T, buildEntries(8), data || null, { pool: trainPool() }); }
 function initNets(saved, br) {
   if (saved && Array.isArray(saved.list) && saved.list.some((n) => n.id === saved.active)) S.nets = saved;
@@ -11643,6 +11695,14 @@ function renderHud() {
 
 // ---------------- Novedades ----------------
 const CHANGELOG = [
+  { v: '1.14', items: [
+    '🧠 Academia: nuevas etapas 3 (Tendencias) y 4 (Afinar). Antes, a partir de la generación 31 se movían los ~1.900 números de la red a la vez y la suerte de las carreras tapaba lo que funcionaba (lo medí: la variante «buena» repetía en otra tanda de carreras como una moneda al aire)',
+    '🎚 Etapa 3 · Tendencias (10 generaciones): solo se ajustan las 19 tendencias (cuánto ataca, batería, gomas, cuándo parar…). Etapa 4 · Afinar (20 generaciones): la última capa, cómo reacciona a cada situación, que es donde más señal dio la prueba. Cambian de una a otra solas',
+    '⏱ En las etapas 3 y 4 el entrenamiento también puntúa el TIEMPO (respecto al coche mediano y al compañero que lleva el rival), no solo el puesto: el puesto va a saltos y depende mucho de la suerte; el tiempo deja ver mucho mejor qué variante va más rápida',
+    '🎭 El carácter de cada piloto está en la parte de dentro de la red, que en las etapas 3 y 4 no se toca. Además, una versión que pierda más de 10 puntos de «fiel al carácter» ya no cuenta como mejor aunque gane más',
+    '↩ Al cerrar cada etapa, si sus exámenes salen de media claramente peor (6 puntos) que la mejor versión, vuelve a ella y sigue con la etapa siguiente',
+    '🏆 Clasificación de redes: marca las que tienen un «examen antiguo» (de una versión anterior del juego) para que las vuelvas a examinar antes de compararlas',
+  ] },
   { v: '1.13.1', items: [
     '🧠 Academia: la red aprende a GANAR más que a ahorrar batería. En el premio del entrenamiento la gestión (batería y gomas) pesa 0,4 veces lo de antes y ganar al compañero con el mismo coche pesa más (±1 en vez de ±0,7)',
     '📝 Nota del examen con los pesos nuevos: resultados 65 %, conducción limpia 25 % y gestión 10 % (antes 50/25/25). Las notas guardadas se recalculan para poder comparar',
@@ -13086,12 +13146,23 @@ function examDone() {
     if (!ex.vs) {
       const est = 1000 + eloGap(p);
       n.elo = n.elo === undefined ? est : Math.round(0.5 * n.elo + 0.5 * est);
-      if (!n.best || (R.nota !== undefined && n.best.nota !== undefined ? R.nota > n.best.nota : R.pct > n.best.pct)) { n.best = { g: ex.gen, pct: R.pct, nota: R.nota, margin: R.margin, data: ex.snap, w13: true }; n.worse = 0; if (ex.auto) flash(`🏅 NUEVA MEJOR VERSIÓN: G${ex.gen} · nota ${R.nota ?? R.pct}`, 1800); }
+      // v1.14: una versión que gana más pero pierde el carácter de los pilotos (fiel al carácter 10 puntos peor) no cuenta como mejor
+      const fidOK = R.fid === null || R.fid === undefined || !n.best || n.best.fid === null || n.best.fid === undefined || R.fid >= n.best.fid - 10;
+      if (!n.best || (fidOK && (R.nota !== undefined && n.best.nota !== undefined ? R.nota > n.best.nota : R.pct > n.best.pct))) { n.best = { g: ex.gen, pct: R.pct, nota: R.nota, margin: R.margin, fid: R.fid, data: ex.snap, w13: true }; n.worse = 0; if (ex.auto) flash(`🏅 NUEVA MEJOR VERSIÓN: G${ex.gen} · nota ${R.nota ?? R.pct}`, 1800); }
       // v1.13: si dos exámenes seguidos salen claramente peor que la mejor versión, se vuelve a ella y se aprende con pasos más cortos
       else if (ex.auto && n.best.nota !== undefined && R.nota !== undefined && n.best.data && R.nota <= n.best.nota - Math.max(6, R.margin ?? 7)) { // solo si cae más que el margen de error del examen (el récord de la mejor versión suele ser una tirada con suerte)
         n.worse = (n.worse || 0) + 1;
         if (n.worse >= 2 && S.settings.autoBest !== false && n.id === S.nets.active) { n.worse = 0; const k = Math.max(0.25, ((n.best.data.lrK ?? 1) * 0.7)); n.best.data.lrK = k; setTimeout(() => autoRestoreBest(n, R.nota), 50); }
       } else n.worse = 0;
+      // v1.14: al cerrar una etapa 3 o 4, si sus exámenes salen de media claramente peor que la mejor versión, se vuelve a ella
+      // y se sigue con la etapa siguiente (así ninguna etapa deja la red peor de lo que estaba)
+      const tr = S.trainer;
+      const ended = tr && tr.phaseEndAt ? tr.phaseEndAt(ex.gen) : null, len = ended ? NEURAL.PHASE_GENS[ended] : 0;
+      if (ended && ex.auto && n.id === S.nets.active && S.settings.autoBest !== false && n.best && n.best.data && n.best.nota !== undefined && R.nota !== undefined && !(n.best.g > ex.gen - len)) {
+        const ph = (n.exams || []).filter((x) => x.auto && !x.vs && x.nota !== undefined && x.g > ex.gen - len && x.g <= ex.gen).slice(-2);
+        const avg = ph.reduce((a, x) => a + x.nota, 0) / Math.max(1, ph.length);
+        if (ph.length && avg <= n.best.nota - (ph.length >= 2 ? 6 : 8)) { /* con un solo examen hace falta más distancia (el examen tiene ±7) */ n.worse = 0; setTimeout(() => autoRestoreBest(n, Math.round(avg), ended === 'tend' ? 'afin' : 'tend'), 50); }
+      }
     } else {
       const m = S.nets.list.find((x) => x.id === ex.vs);
       const ra = n.elo ?? 1000, rb = (m && m.elo) ?? 1000, d = eloGap(p);
@@ -13103,10 +13174,11 @@ function examDone() {
   }
   if (acOpen()) renderAcademy();
 }
-async function autoRestoreBest(n, pct) {
+async function autoRestoreBest(n, pct, nextMask) {
   const was = S.training;
   S.training = false;
   S.trainer = newTrainer(n.best.data); WK.owner = null;
+  if (nextMask && S.trainer.startPhase) S.trainer.startPhase(nextMask);
   S.lastGenSaved = S.trainer.gen;
   await saveBrains();
   S.training = was; updateTrainPill();
@@ -13160,9 +13232,9 @@ function examHTML() {
     h += `<div class="note">Cada categoría lleva su margen (±): las barras en verde o rojo ganan o pierden seguro; en amarillo, no se puede asegurar. En remontada y aguantar la referencia no es el 50 % (la rayita blanca): saliendo detrás, las reglas contra sí mismas solo ganan el 30 % de los duelos, y saliendo delante el 75 %. Las flechas en gris caben dentro del azar.${(S.trainer.confirms || S.trainer.rejects) ? ` · Confirmaciones del rival: ${S.trainer.confirms || 0} aceptadas, ${S.trainer.rejects || 0} rechazadas` : ''}</div>`;
     h += '</div>';
   } else if (!ex) h += '<div class="note">27 carreras fijas en 9 categorías (rápidos, lentos y urbanos, lluvia, tiempo cambiante, safety car, remontada, aguantar delante, carrera larga y circuitos nunca vistos). En cada escudería un coche lleva la red y el otro el rival, y luego al revés. Más de un 50 % es que la red es mejor. Mientras entrenas se hace solo cada 10 generaciones.</div>';
-  if (n && n.best) h += `<div class="ac-row" style="margin-top:6px"><span>🏅 Mejor versión de esta red: <b>G${n.best.g}</b> (${n.best.pct}%)</span>${n.best.g !== S.trainer.gen && n.best.data ? '<button class="btn ghost" id="acBest">↩ Volver a ella</button>' : '<span class="muted">(es la actual)</span>'}</div>`;
+  if (n && n.best) h += `<div class="ac-row" style="margin-top:6px"><span>🏅 Mejor versión de esta red: <b>G${n.best.g}</b> (${n.best.nota !== undefined ? 'nota ' + n.best.nota : n.best.pct + '%'})</span>${n.best.g !== S.trainer.gen && n.best.data ? '<button class="btn ghost" id="acBest">↩ Volver a ella</button>' : '<span class="muted">(es la actual)</span>'}</div>`;
   const ranked = S.nets.list.filter((x) => x.elo !== undefined).sort((a, b) => b.elo - a.elo);
-  if (ranked.length) h += `<h3 style="margin-top:12px">🏆 Clasificación de redes</h3><div class="exk">` + [{ name: 'Las reglas', elo: 1000, rules: true }].concat(ranked).sort((a, b) => b.elo - a.elo).map((x, i) => `<span>${i + 1}.</span><span>${x.rules ? '<i class="muted">Las reglas</i>' : esc(x.name) + ' · G' + netGen(x)}</span><b>${x.elo}</b>`).join('') + '</div><div class="note">Puntos tipo ajedrez: las reglas valen 1000. Se actualizan con cada examen (contra las reglas o contra otra red).</div>';
+  if (ranked.length) h += `<h3 style="margin-top:12px">🏆 Clasificación de redes</h3><div class="exk">` + [{ name: 'Las reglas', elo: 1000, rules: true }].concat(ranked).sort((a, b) => b.elo - a.elo).map((x, i) => `<span>${i + 1}.</span><span>${x.rules ? '<i class="muted">Las reglas</i>' : esc(x.name) + ' · G' + netGen(x) + (oldExam(x) ? ' <small class="muted">· examen antiguo</small>' : '')}</span><b>${x.elo}</b>`).join('') + '</div><div class="note">Puntos tipo ajedrez: las reglas valen 1000. Se actualizan con cada examen (contra las reglas o contra otra red).' + (ranked.some(oldExam) ? ' Las de «examen antiguo» se midieron con una versión anterior del juego (otros pilotos y otras reglas de carrera): para compararlas de verdad, actívalas y examínalas otra vez.' : '') + '</div>';
   return h;
 }
 
