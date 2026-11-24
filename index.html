@@ -1206,12 +1206,47 @@ body.focus #hudList .hg{min-width:30px!important;font-size:10px!important;letter
 .wx-fc2{display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:4px;margin-top:6px}
 .wx-fc2 div{background:#ffffff0a;border-radius:8px;padding:5px 4px;text-align:center;display:flex;flex-direction:column}
 .wx-fc2 b{font:800 15px var(--num)}.wx-fc2 small{font-size:10.5px;color:var(--mut)}.wx-fc2 em{font-style:normal;font-size:10px;color:var(--mut)}
+
+/* v1.15: simular la clasificación entera desde la pantalla de antes de la carrera */
+.pw-gorow{display:flex;gap:8px}
+.pw-gorow .pw-go{flex:1}
+.pw-qsim{flex:none;height:56px;border-radius:14px;background:#262D35;color:var(--text,#e8ecf2);border:1px solid var(--line,#2c333d);display:flex;align-items:center;gap:8px;padding:0 14px;font:600 13px/1.15 var(--ui,system-ui);cursor:pointer;text-align:left}
+.pw-qsim:hover{background:#2E3640}
+
+/* v1.15: móviles con cámara en la pantalla (y la barra de notificaciones que baja al tocar arriba):
+   lo de arriba del todo se aparta lo que diga el móvil (safe-area) y, en pantallas táctiles, unos píxeles más */
+:root{--sat:env(safe-area-inset-top,0px);--sal:env(safe-area-inset-left,0px);--sar:env(safe-area-inset-right,0px);--sab:env(safe-area-inset-bottom,0px);--topx:0px}
+@media (pointer:coarse){ :root{--topx:6px} }
+header{padding-top:calc(8px + var(--sat) + var(--topx));padding-left:calc(14px + var(--sal));padding-right:calc(14px + var(--sar))}
+.pw-top{padding-top:calc(12px + var(--sat) + var(--topx))}
+.pw-bottom{padding-bottom:calc(14px + var(--sab))}
+@media (pointer:coarse){
+  header .btn{min-height:40px}
+  .pw-top .back{width:42px;height:42px}
+  .pw-top{min-height:60px}
+}
+body.focus #hudTop{top:calc(8px + var(--sat) + var(--topx));left:calc(8px + var(--sal))}
+body.focus #hExit{top:calc(6px + var(--sat) + var(--topx));right:calc(8px + var(--sar))}
+body.focus #hudList{top:calc(48px + var(--sat) + var(--topx))!important;left:calc(6px + var(--sal))!important;max-height:calc(100% - 110px - var(--ordH,0px) - var(--sat) - var(--topx) - var(--sab))!important}
+body.focus #rcMsg.on{top:calc(48px + var(--sat) + var(--topx));right:calc(8px + var(--sar))}
+body.focus #replay{top:calc(var(--rpT,92px) + var(--sat) + var(--topx))!important;right:calc(8px + var(--sar))!important}
+body.focus #hudBtns{left:calc(6px + var(--sal));right:calc(6px + var(--sar));bottom:calc(6px + var(--sab))}
+body.focus #hudOrders.on{bottom:calc(54px + var(--sab))}
+body.focus #hudMore.open{bottom:calc(56px + var(--sab))}
+body.focus #msgs{bottom:calc(56px + var(--ordH,0px) + var(--sab))!important}
+body.focus #hudWall{bottom:calc(56px + var(--ordH,0px) + var(--sab))}
+/* v1.15: avisos del muro dentro de la barra de órdenes; botones de abajo algo más grandes (ya no está el 🎧) */
+.or-warn{font-size:11px;color:#ffcf70;padding:0 2px 2px 4px;line-height:1.25}
+body.focus #hudBtns button{height:46px;font-size:16px}
+body.focus #hudOrders.on{bottom:calc(58px + var(--sab))}
+body.focus #hudMore.open{bottom:calc(60px + var(--sab))}
+body.focus #msgs{bottom:calc(60px + var(--ordH,0px) + var(--sab))!important}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.14 · FASE 14</small></div>
+    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.15 · FASE 15</small></div>
     <button class="btn" id="btnMenu" title="Menú: todas las opciones">☰<span class="long"> Menú</span></button>
     <div id="raceinfo">
       <div class="lap"><span id="lapLbl">VUELTA</span> <b id="lapNow">–</b><span>/<b id="lapTot">–</b></span></div>
@@ -1270,7 +1305,7 @@ body.focus #hudList .hg{min-width:30px!important;font-size:10px!important;letter
         </div>
         <div id="hudOrders"></div>
         <div id="hudMore">
-          <button id="hCam"><span>📷</span>Seguir coche</button><button id="hList"><span>☰</span>Lista</button><button id="hNames"><span>🏷</span>Nombres</button><button id="hSound"><span>🔊</span>Sonido</button><button id="hRot"><span>⟳</span>Girar vista</button><button id="hOrd"><span>🎧</span>Barra de órdenes</button>
+          <button id="hCam"><span>📷</span>Seguir coche</button><button id="hList"><span>☰</span>Lista</button><button id="hNames"><span>🏷</span>Nombres</button><button id="hSound"><span>🔊</span>Sonido</button><button id="hRot"><span>⟳</span>Girar vista</button><button id="hOrd"><span>🎧</span>Barra de órdenes</button><button id="hPits"><span>🅿</span>Paradas: automáticas</button>
         </div>
         <button id="hExit" title="Salir de la pantalla completa">✕</button>
         <div id="rcMsg"></div>
@@ -2499,9 +2534,35 @@ class Race {
   // trozos de alerón en la pista: quien los pisa puede pinchar; los comisarios los retiran con el safety car o al rato
   dropDebris(c, n) {
     if (this.quali || this.o.flying) return;
-    for (let k = 0; k < n; k++) this.debris.push({ s: mod(c.sTot - 2 - this.rng() * 8, this.T.L), d: clamp(c.d + (this.rng() - 0.5) * 5, -this.T.hw + 0.5, this.T.hw - 0.5), t: this.t, life: 45 + this.rng() * 50 });
+    for (let k = 0; k < n; k++) this.debris.push({ id: (this.dbN = (this.dbN || 0) + 1), s: mod(c.sTot - 2 - this.rng() * 8, this.T.L), d: clamp(c.d + (this.rng() - 0.5) * 5, -this.T.hw + 0.5, this.T.hw - 0.5), t: this.t, life: 45 + this.rng() * 50 });
     // v1.6.4: con varios trozos en la pista, a veces VSC para que los comisarios los recojan
-    if (n >= 2 && !this.sc && !this.vsc && this.debris.length >= 2 && this.rng() < 0.5) this.deployVSC('restos en la pista');
+    // v1.15: menos VSC por un par de trozos (los pilotos ya los esquivan); con muchos, a veces safety car
+    if (!this.sc && !this.vsc && this.debris.length >= 4 && this.rng() < 0.35) this.deploySC('muchos restos en la pista');
+    else if (n >= 2 && !this.sc && !this.vsc && this.debris.length >= 2 && this.rng() < 0.12) this.deployVSC('restos en la pista');
+  }
+  // v1.15: coches parados en la pista. Antes solo había bandera si alguien abandonaba por accidente: en un choque
+  // múltiple con todos parados (sin abandonar) no salía nada y los de detrás se quedaban atascados
+  updateIncidents(dt) {
+    if (this.quali || this.o.flying || this.o.noSC || this.phase !== 'racing' || this.startT === null || this.sc || this.scEnding || this.vsc || this.red) { this.incT = 0; return; }
+    if (this.t - this.startT < 6 || (this.greenT && this.t - this.greenT < 4)) return; // la salida y las relanzadas: coches lentos normales
+    const T = this.T, L = T.L;
+    const on = this.cars.filter((c) => !c.pit && !c.inLane && !c.finished && !c.hidden && Math.abs(c.d) < T.hw + 1.5 && ((c.dnf && !c.parked) || (!c.dnf && (c.slowT || 0) > 2.5)));
+    if (!on.length) { this.incT = 0; return; }
+    // el grupo más grande de coches parados a menos de 250 m entre sí
+    let best = [];
+    for (const a of on) { const g = on.filter((b) => Math.abs(mod(b.sTot - a.sTot + L / 2, L) - L / 2) < 250); if (g.length > best.length) best = g; }
+    this.incT = (this.incT || 0) + dt;
+    const n = best.length, long = best.some((c) => c.dnf || (c.slowT || 0) > 10);
+    if (n >= 2 && this.incT > 1.5) {
+      const heavy = best.filter((c) => c.dnf || c.dmgTaken > 1).length;
+      this.incT = 0;
+      if (n >= 3 && heavy >= 2 && this.rng() < 0.45 && this.callRed('accidente múltiple')) return;
+      this.deploySC(`choque múltiple (${n} coches parados)`);
+    } else if (n === 1 && long && Math.abs(best[0].d) < T.hw && this.incT > 8) {
+      // uno solo parado en plena pista y no se mueve: virtual o safety car para retirarlo
+      this.incT = 0;
+      if (this.rng() < 0.55) this.deployVSC('coche parado en la pista: ' + best[0].drv.name); else this.deploySC('coche parado en la pista: ' + best[0].drv.name);
+    }
   }
   updateDebris() {
     if (!this.debris.length) return;
@@ -2545,7 +2606,7 @@ class Race {
     if (c.dnf) return;
     if (rng() < clamp((sev - 0.42) / 0.33, 0, 1)) { this.retire(c, 'accidente'); return; } // fuerte: fin de carrera
     if (sev > 0.25 && rng() < 0.15 + 0.45 * sev) this.puncture(c, 'golpe contra las barreras');
-    if (sev > 0.5) { const q = rng(); if (q < 0.15) this.deploySC('restos en la pista tras el golpe de ' + c.drv.name); else if (q < 0.3) this.deployVSC('restos en la pista'); }
+    if (sev > 0.5) { const q = rng(); if (q < 0.25) this.deploySC('restos en la pista tras el golpe de ' + c.drv.name); else if (q < 0.37) this.deployVSC('restos en la pista'); }
   }
   puncture(c, why) {
     if (c.punct || c.dnf) return;
@@ -2665,7 +2726,7 @@ class Race {
     // accidente: casi siempre safety car (a veces basta con el virtual); coche parado: virtual o solo bandera amarilla y grúa
     const q = this.rng();
     if (reason === 'accidente' && this.maybeRedFlag(c)) { /* bandera roja: no hace falta safety car */ }
-    else if (reason === 'accidente') { if (q < 0.65) this.deploySC('accidente de ' + c.drv.name); else this.deployVSC('accidente de ' + c.drv.name); }
+    else if (reason === 'accidente') { if (q < 0.78) this.deploySC('accidente de ' + c.drv.name); else this.deployVSC('accidente de ' + c.drv.name); } // v1.15: más safety car (antes 65 %)
     else if (q < 0.25 && !/boxes/.test(reason)) this.deployVSC('coche parado de ' + c.drv.name);
     this.checkDone();
   }
@@ -2680,8 +2741,14 @@ class Race {
     const street = this.T.runoff < 5 && this.rng() < 0.25;                // circuito urbano: barreras que reparar
     const big = c.dmgTaken > 1.7 && this.rng() < 0.18;                    // golpe muy fuerte: restos por todas partes
     if (!(pile || street || big)) return false;
+    return this.callRed(pile ? 'accidente múltiple' : street ? 'hay que reparar las barreras' : 'restos por toda la pista');
+  }
+  callRed(reason) {
+    if (this.quali || this.o.flying || this.o.noSC || this.redDone || this.startT === null || this.phase !== 'racing') return false;
+    const lead = this.order.find((x) => !x.dnf && !x.finished);
+    if (!lead || this.o.laps - lead.lapsDone < 2.5 || this.cars.length < 6) return false;
     this.redDone = true;
-    this.red = { phase: 'in', t0: this.t, reason: pile ? 'accidente múltiple' : street ? 'hay que reparar las barreras' : 'restos por toda la pista' };
+    this.red = { phase: 'in', t0: this.t, reason };
     this.sc = null; this.scEnding = null; this.vsc = null; this.inquiries = [];
     for (const x of this.cars) { if (x.mode === 'attack' || x.mode === 'defend') { x.mode = 'normal'; x.wT = 1; } x.duel = null; x.pitPlan = null; x.manualPit = null; }
     this.ev({ type: 'roja', reason: this.red.reason });
@@ -3632,6 +3699,26 @@ class Race {
           if (dsw < -(P.carLen + 2) || dsw > 170 || o.ghost || o.pit || !slowStill) c.avoid = null;
         }
       } else c.avoid = null;
+      // v1.15: restos en la pista: se ven venir y se esquivan si hay sitio. Los más finos casi siempre; en plena lucha,
+      // rueda con rueda o con lluvia, peor. Si no se ve o no hay hueco, se pisan (y se puede pinchar)
+      if (!this.debris.length) { c.dbDodge = null; c.dbSeen = null; }
+      else if (!c.pit && !c.avoid && !c.spin && !c.recover && started && !this.quali && c.v > 20) {
+        const sm = mod(c.sTot, L);
+        if (c.dbDodge) { const ds0 = mod(c.dbDodge.s - sm + L / 2, L) - L / 2; if (ds0 < -3 || !this.debris.some((db) => db.id === c.dbDodge.id)) c.dbDodge = null; }
+        if (!c.dbDodge) for (const db of this.debris) {
+          const dsb = mod(db.s - sm + L / 2, L) - L / 2;
+          if (dsb < 12 || dsb > 90 || Math.abs(db.d - c.d) > P.carWid * 0.5 + 0.8) continue;
+          c.dbSeen = c.dbSeen || {};
+          if (c.dbSeen[db.id] === undefined) {
+            const busy = !!(c.duel || c.side.length || c.mode === 'attack' || c.mode === 'defend');
+            c.dbSeen[db.id] = this.rng() < clamp(0.5 + 0.42 * (p.cons ?? 0.7) - (busy ? 0.3 : 0) - 0.15 * (this.wx.wet || 0), 0.15, 0.95);
+          }
+          if (!c.dbSeen[db.id]) continue;
+          const m = P.carWid * 0.5 + 1.1, edge = hw - 0.6, dP = db.d + m, dM = db.d - m, okP = dP <= edge, okM = dM >= -edge;
+          const tg = okP && okM ? (Math.abs(dP - c.d) < Math.abs(dM - c.d) ? dP : dM) : okP ? dP : okM ? dM : null;
+          if (tg !== null) { c.dbDodge = { id: db.id, s: db.s, d: tg }; break; }
+        }
+      } else if (c.pit || c.avoid) c.dbDodge = null;
 
       // ---- control longitudinal ----
       const offPre = Math.abs(c.d) - hw;
@@ -3736,6 +3823,7 @@ class Race {
       let lo = -(hw + 2), hi = hw + 2;
       if (pitD !== null) { dDes = pitD; lo = -(hw + 16); hi = hw + 16; }
       else if (c.avoid) { dDes = c.avoid.d; lo = -(hw + 2); hi = hw + 2; }
+      else if (c.dbDodge) { dDes = c.dbDodge.d; }
       else if (c.pud) { dDes = c.pud.d; }
       else { const wl = c.squeezedBy && t - c.squeezedBy.t < 4 ? Math.min(4, Math.max(1, T.runoff - 1)) : c.duel && c.duel.wide ? c.duel.wide : c.mode === 'attack' && c.attWide ? c.attWide : 0; const lim = wl ? hw + wl : hw - 1.2; dDes = clamp(dDes, -lim, lim); }
       for (const s of c.side) {
@@ -3960,7 +4048,7 @@ class Race {
     if (this.o.forceSC && !this.forcedSC && this.phase === 'racing' && this.order && this.order[0] && this.order[0].sTot > this.o.forceSC * this.o.laps * this.T.L) {
       this.forcedSC = true; const keep = this.o.noSC; this.o.noSC = false; this.deploySC('coche parado en la pista'); this.o.noSC = keep;
     }
-    this.updateDebris();
+    this.updateDebris(); this.updateIncidents(dt);
     if (this.t - (this.toT || 0) >= 1) { this.toT = this.t; this.teamOrders(); }
 
     // reanudación tras el safety car: se puede adelantar al cruzar la meta el líder
@@ -7756,10 +7844,14 @@ function ordBarHTML() {
     if (ga !== null && ga < 0.7 && (gb === null || ga <= gb)) fight = `<em class="fa">+${ga.toFixed(1).replace('.', ',')}</em>`;
     else if (gb !== null && gb < 0.7) fight = `<em class="fd">−${gb.toFixed(1).replace('.', ',')}</em>`;
     const wpl = r.wearPerLap(c, c.tyre) || 0.05, life = Math.max(0, Math.floor((0.75 - c.wear) / wpl));
+    // v1.15: lo que antes estaba en el Muro (🎧): la parada prevista va en el desplegable de Box y los avisos, en una línea debajo
+    const plan = c.plan && c.plan.idx + 1 < c.plan.seq.length && !S.settings.manualPits ? c.plan : null;
+    const boxLbl = plan ? `Box · v${plan.nextStop}→${SIM.COMPOUNDS[plan.seq[plan.idx + 1]].id}` : 'Box';
+    const warn = (S.settings.manualPits || c.punct ? wallHints(c) : []).concat(r.cars.some((x) => x !== c && x.team.id === c.team.id && x.fasterThanMate && x.sTot < c.sTot && !x.dnf) && !c.letPass && tc !== 'pasar' ? ['tu compañero va más rápido detrás (Táctica → Dejar pasar)'] : []);
     return `<div class="or-row${hi ? ' hi' : ''}${c.id === S.sel ? ' sel' : ''}" data-car="${c.id}"><b data-orsel="1" title="Ver a este piloto" style="color:${readableOn(c.team.color)}">P${c.pos} ${esc(c.drv.short)}${fight}</b>${tyreRing(c, 'ht')}<small title="desgaste · vueltas que le quedan aprox.">${Math.round(Math.min(1, c.wear) * 100)}% · ~${life}v</small>
       <select data-os="pace" title="Ritmo">${opt('agresivo', pm, '🔥 Agresivo')}${opt('normal', pm, 'Normal')}${opt('conservador', pm, '🧊 Conserv.')}${opt('cuidar', pm, '🛞 Cuidar')}${pm === 'atacar' ? opt('atacar', pm, '🔥 Atacar') : ''}</select>
       <select data-os="tac" title="Táctica">${opt('libre', tc, 'Libre')}${opt('atacar', tc, '⚔ Atacar')}${opt('defender', tc, '🛡 Defender')}${opt('guarda', tc, '🔋 Guardar')}${opt('gasta', tc, '⚡ Gastar')}${opt('pasar', tc, '↓ Dejar pasar')}</select>
-      <select data-os="box" title="Parada en boxes">${c.pit ? '<option>🅿 parando</option>' : `<option value="" ${pp ? '' : 'selected'}>Box</option>${['S', 'M', 'H', 'I', 'W'].map((k) => opt(k, pp, '🅿 ' + SIM.COMPOUNDS[k].name)).join('')}${pp ? '<option value="x">✕ No parar</option>' : ''}`}</select></div>`;
+      <select data-os="box" title="Parada en boxes">${c.pit ? '<option>🅿 parando</option>' : `<option value="" ${pp ? '' : 'selected'}>${boxLbl}</option>${['S', 'M', 'H', 'I', 'W'].map((k) => opt(k, pp, '🅿 ' + SIM.COMPOUNDS[k].name)).join('')}${plan && !pp ? '<option value="stop-1">⏪ Parar 1 vuelta antes</option><option value="stop+1">⏩ Parar 1 vuelta después</option>' : ''}${pp ? '<option value="x">✕ No parar</option>' : ''}`}</select></div>${warn.length ? `<div class="or-warn" data-car="${c.id}">⚠ ${warn.join(' · ')}</div>` : ''}`;
   }).join('') + rad;
 }
 function renderOrders(force) {
@@ -9564,7 +9656,7 @@ function renderWall(force) {
     if (el.id === 'hudWall' && (!html || !el.classList.contains('open'))) { if (!html) el.classList.remove('open'); el.innerHTML = ''; el.dataset.h = ''; continue; }
     if (force || el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; }
   }
-  const hb = $('#hWall'); if (hb) hb.style.display = html ? '' : 'none';
+  const hb = $('#hWall'); if (hb) hb.style.display = 'none'; // v1.15: el Muro va dentro de la barra de órdenes
 }
 function wallClick(e) {
   const r = S.race; if (!r) return;
@@ -10231,7 +10323,7 @@ function showPreRace() {
       ${season && mgr && !ss.sponsor ? '<button class="pw-warn pw-warnb" id="mSpons">💼 Aún no tienes patrocinador para esta temporada. <b>Toca aquí para elegirlo ›</b></button>' : ''}
     </div>
     <div class="pw-bottom">
-      <button class="pw-go" id="mGo"><span class="pw-lights"><i></i><i></i><i></i><i></i><i></i></span>Ir a la parrilla</button>
+      <div class="pw-gorow"><button class="pw-go" id="mGo"><span class="pw-lights"><i></i><i></i><i></i><i></i><i></i></span>Ir a la parrilla</button>${st.grid !== 'random' && st.qMode !== 'rapida' ? '<button class="pw-qsim" id="mQSim" title="Simular toda la clasificación al instante y ver la parrilla">⏩<span>Simular<br>clasificación</span></button>' : ''}</div>
       <div class="pw-nav">${live ? '<button id="mBack"><span>▶</span>Volver</button>' : ''}<button id="mChamp"><span>📊</span>${season ? 'Clasificación' : 'Campeonato'}</button><button id="mTeams"><span>🏎</span>Escuderías</button><button id="mAcad"><span>🧠</span>Academia</button>${mgr ? `<button id="mOffice"><span>🏢</span>Oficina · ${money(ss.budgets[mgr.id] ?? 0)}</button>` : ''}</div>
     </div>
     <div class="pw-shade" id="pwShade"></div>
@@ -10349,6 +10441,7 @@ function showPreRace() {
   $$('#mbox [data-b]').forEach((b) => (b.onclick = () => { if (b.disabled) return; S.settings.brain = b.dataset.b; $$('#mbox [data-b]').forEach((x) => x.classList.toggle('on', x === b)); }));
   $('#mChamp').onclick = () => showChamp('pilotos', true);
   $('#mGo').onclick = () => { closeModal(); startRace(); saveAll(); };
+  if ($('#mQSim')) $('#mQSim').onclick = () => { closeModal(); saveAll(); simQualiAll(); };
   $('#mdSeason').onclick = () => { if (!season) { S.settings.mode = 'temporada'; S.pendingTrack = null; saveAll(); showPreRace(); } };
   $('#mdFree').onclick = () => { if (season) { S.settings.mode = 'libre'; S.pendingTrack = null; saveAll(); showPreRace(); } };
   if ($('#mOffice')) $('#mOffice').onclick = showOffice;
@@ -10390,6 +10483,52 @@ function startQuali(phase) {
   resetView();
   flash(S.qf ? 'Q' + S.qf.phase : 'CLASIFICACIÓN', 1500);
 }
+// v1.15: toda la clasificación de golpe (Q1, Q2 y Q3, o la de 1-2 vueltas) y directamente a la parrilla
+function simQualiAll() {
+  startQuali();
+  if (!S.race || !S.race.quali) return;
+  if (!S.qf) { skipToEnd(); S.doneHandled = true; S.doneAt = S.race.t; finishRace(); return; } // 1 o 2 vueltas: sale la tabla de siempre con «Empezar la carrera»
+  // Q1, Q2 y Q3 con el mismo cálculo (así los tiempos de las tres rondas se pueden comparar)
+  S.qf.simAll = true;
+  qfSimRounds(1, S.entries.map((_, i) => i), 0);
+  showQualiFinal(qfGrid(), qfGo(qfGrid()));
+}
+// simula las rondas de la F1 desde «from» con el cálculo rápido. «off»: corrección para que casen con los tiempos
+// de una ronda corrida en pista (la vuelta en pista, con rebufo y goma a punto, sale algo más rápida)
+function qfSimRounds(from, pool, off) {
+  const Q = S.qf, sz = qfSizes(S.entries.length);
+  for (let p = from; p <= 3; p++) {
+    const ents = pool.map((i) => S.entries[i]);
+    const q = SIM.qualify(S.T, ents, (S.seed + p * 7) >>> 0, { weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+    const evo = -0.08 * (p - 1); // la pista va mejorando de una ronda a otra
+    Q.res[p] = q.map((x) => ({ idx: pool[x.idx], time: x.time < 900 ? x.time + (off || 0) + evo : null }));
+    pool = Q.res[p].slice(0, p < 3 ? sz[p] : 99).map((x) => x.idx);
+  }
+}
+// parrilla: Q3 por su orden, luego los eliminados en Q2 y en Q1 por sus tiempos
+function qfGrid() {
+  const Q = S.qf, grid = [], seen = new Set();
+  for (const p of [3, 2, 1]) for (const x of Q.res[p] || []) if (!seen.has(x.idx)) { seen.add(x.idx); grid.push(x); }
+  for (let i = 0; i < S.entries.length; i++) if (!seen.has(i)) grid.push({ idx: i, time: null });
+  return grid;
+}
+function qfGo(grid) {
+  return () => { const ids = grid.map((x) => x.idx); if (S.settings.grid === 'rev') ids.reverse(); S.qf = null; closeModal(); startRace(null, { grid: ids, quali: grid }); };
+}
+// parrilla final de la clasificación de la F1, con la ronda en la que cayó cada uno
+function showQualiFinal(grid, go) {
+  const Q = S.qf, M = mgrTeam() || (meDrv() ? meDrv().team : null), pole = grid[0] && grid[0].time;
+  const outIn = (idx) => ((Q.res[3] || []).some((x) => x.idx === idx) ? '' : (Q.res[2] || []).some((x) => x.idx === idx) ? 'Q2' : 'Q1');
+  modal(`<h2><small>CLASIFICACIÓN · ${esc(S.T.name)}</small>${pole ? 'Pole para ' + esc(S.entries[grid[0].idx].driver.name) : 'Parrilla de salida'}</h2>
+    <div class="sub">Así sale la parrilla. En gris, los que cayeron en la Q1 o la Q2.</div>
+    <div style="overflow-x:auto"><table class="lt2"><thead><tr><th>Pos.</th><th>Piloto</th><th class="r">Tiempo</th><th class="r">Cayó en</th></tr></thead><tbody>
+    ${grid.map((x, i) => { const en = S.entries[x.idx], o = outIn(x.idx), mine = M && en.team.id === M; return `<tr class="${o ? 'qf-out' : ''}${mine ? ' mine' : ''}"><td><b>${i + 1}</b></td><td>${chip(en.team, en.driver.num)} ${esc(en.driver.name)}</td><td class="r">${x.time ? fmtLap(x.time) : 'sin tiempo'}</td><td class="r">${o}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div class="actions"><button class="btn ghost" id="qAgain">↻ Repetir clasificación</button><span class="spacer"></span><button class="btn big" id="qGo">▶ Empezar la carrera</button></div>`);
+  $('#qAgain').onclick = () => { closeModal(); S.qf = null; simQualiAll(); };
+  $('#qGo').onclick = go;
+  if (S.race && S.race.quali) S.doneHandled = true; // la de la pista (si la había) ya no saca su tabla al acabar
+}
 // cuántos pasan de cada ronda (con 22 coches: 16 a la Q2 y 10 a la Q3)
 function qfSizes(n) { const q3 = Math.min(10, Math.ceil(n * 0.45)); return [n, q3 + Math.round((n - q3) / 2), q3]; }
 function showQualiF1(r) {
@@ -10405,25 +10544,17 @@ function showQualiF1(r) {
     <div style="overflow-x:auto"><table class="lt2"><thead><tr><th>Pos.</th><th>Piloto</th><th class="r">Tiempo</th><th class="r">Dif.</th><th></th></tr></thead><tbody>
     ${rows.map((x, i) => row(x, i, i >= keep)).join('')}</tbody></table></div>
     <div class="actions">${ph < 3 ? `<button class="btn ghost" id="qfSim">⏩ Simular el resto</button><span class="spacer"></span><button class="btn big" id="qfNext">▶ Q${ph + 1}</button>` : `<span class="spacer"></span><button class="btn big" id="qGo">▶ Empezar la carrera</button>`}</div>`);
-  const finish = () => {
-    // parrilla: Q3 por su orden, luego los eliminados en Q2 y en Q1 por sus tiempos
-    const grid = [], seen = new Set();
-    for (const p of [3, 2, 1]) for (const x of Q.res[p] || []) if (!seen.has(x.idx)) { seen.add(x.idx); grid.push(x); }
-    for (let i = 0; i < S.entries.length; i++) if (!seen.has(i)) grid.push({ idx: i, time: null });
-    const ids = grid.map((x) => x.idx); if (S.settings.grid === 'rev') ids.reverse();
-    S.qf = null; closeModal(); startRace(null, { grid: ids, quali: grid });
-  };
+  const finish = () => { const grid = qfGrid(); qfGo(grid)(); };
   if (ph < 3) {
     $('#qfNext').onclick = () => { Q.pool = pass.map((x) => x.idx); closeModal(); startQuali(ph + 1); };
     $('#qfSim').onclick = () => {
-      let pool = pass.map((x) => x.idx);
-      for (let p = ph + 1; p <= 3; p++) {
-        const ents = pool.map((i) => S.entries[i]);
-        const q = SIM.qualify(S.T, ents, (S.seed + p * 7) >>> 0, { weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
-        Q.res[p] = q.map((x) => ({ idx: pool[x.idx], time: x.time < 900 ? x.time : null }));
-        pool = Q.res[p].slice(0, p < 3 ? sz[p] : 99).map((x) => x.idx);
-      }
-      finish();
+      // v1.15: las rondas simuladas se corrigen para casar con la que se ha corrido en pista (antes salían más lentas)
+      const ents = Q.pool.map((i) => S.entries[i]);
+      const m = SIM.qualify(S.T, ents, (S.seed + ph * 7) >>> 0, { weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+      const med = (a) => { a = a.filter((t) => t && t < 900).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : 0; };
+      const a = med(rows.map((x) => x.time)), b = med(m.map((x) => x.time)), off = a && b ? a - b + 0.08 * (ph - 1) : 0;
+      qfSimRounds(ph + 1, pass.map((x) => x.idx), off);
+      Q.simAll = true; showQualiFinal(qfGrid(), qfGo(qfGrid()));
     };
   } else $('#qGo').onclick = finish;
 }
@@ -11408,6 +11539,17 @@ function activeNet() { return S.nets ? S.nets.list.find((n) => n.id === S.nets.a
 function netGen(n) { return n.id === S.nets.active ? S.trainer.gen : (n.data && n.data.gen) || 0; }
 async function saveNets() { if (S.nets) await Store.save('redes.json', S.nets); }
 function trainPool() { return Object.values(DATA.TRACKS).filter((t) => t.real); }
+// v1.14: Elo de la mejor versión de una red (antes salía el de la última, aunque fuese peor)
+function bestElo(n) {
+  const b = n.best;
+  if (b && b.g !== undefined) {
+    let e = b.elo;
+    const x = (n.exams || []).filter((q) => !q.vs && q.g === b.g && q.d).pop();
+    if (e === undefined && x) e = Math.round(x.elo ?? 1000 + eloGap(x.w / x.d));
+    if (e !== undefined) return { r: e, rg: b.g, isBest: true, old: b.nota === undefined || (!!x && !x.notaP) };
+  }
+  return { r: n.elo, rg: netGen(n), isBest: false, old: oldExam(n) };
+}
 // v1.13.1: examen hecho antes de la nota nueva (versiones anteriores del juego): no se puede comparar con los de ahora
 function oldExam(n) { const e = (n.exams || []).filter((x) => !x.vs).pop(); return !!e && !e.notaP; }
 function newTrainer(data) { return new NEURAL.Trainer(getTrack('pruebas').T, buildEntries(8), data || null, { pool: trainPool() }); }
@@ -11417,6 +11559,9 @@ function initNets(saved, br) {
   // v1.13: la nota se recalcula con los pesos nuevos (resultados 65 %, limpia 25 %, gestión 10 %) para que todo sea comparable
   for (const n of S.nets.list) {
     for (const e of n.exams || []) if (e.notaP && !e.w13) { e.nota = NEURAL.notaOf(e.notaP.res, e.notaP.limpia, e.notaP.gest, e.notaP.vers); e.w13 = true; }
+    // v1.14: mejor versión de un examen antiguo y ya examinada con la versión de ahora en su generación actual → esa pasa a ser la mejor
+    const le = (n.exams || []).filter((x) => !x.vs).pop();
+    if (n.best && n.best.nota === undefined && le && le.notaP && n.data && le.g === (n.data.gen || 0)) n.best = { g: le.g, pct: le.pct, nota: le.nota, margin: le.margin, fid: le.fid, data: n.data, w13: true };
     if (n.best && n.best.nota !== undefined && !n.best.w13) { const e = (n.exams || []).filter((x) => !x.vs && x.g === n.best.g && x.notaP).pop(); if (e) n.best.nota = e.nota; n.best.w13 = true; }
   }
 }
@@ -11632,7 +11777,13 @@ $('#hList').addEventListener('click', () => {
 $('#hMore').addEventListener('click', (e) => { e.stopPropagation(); const m = $('#hudMore'); m.classList.toggle('open'); $('#hMore').classList.toggle('on', m.classList.contains('open')); });
 $('#hOrd').addEventListener('click', () => { S.ordersHide = !S.ordersHide; renderOrders(true); });
 $('#hudMore').addEventListener('click', (e) => { if (e.target.closest('button')) setTimeout(() => { renderHud(); }, 0); });
-$('#hWall').addEventListener('click', () => { const w = $('#hudWall'); w.classList.toggle('open'); $('#hWall').classList.toggle('on', w.classList.contains('open')); renderWall(true); });
+// v1.15: el Muro va dentro de la barra de órdenes; aquí solo queda elegir paradas automáticas o manuales
+$('#hPits').addEventListener('click', () => {
+  S.settings.manualPits = !S.settings.manualPits; saveAll();
+  if (S.race) for (const c of S.race.cars) if (c.team.id === mgrTeam()) c.manualStrat = S.settings.manualPits;
+  flash(S.settings.manualPits ? '🅿 PARADAS MANUALES: SOLO PARAN CUANDO TÚ LO DIGAS' : '🅿 PARADAS AUTOMÁTICAS: DECIDE EL ESTRATEGA', 1800);
+  renderOrders(true); renderWall(true);
+});
 $('#hudWall').addEventListener('click', wallClick);
 $('#hudOrders').addEventListener('click', (e) => { const rb = e.target.closest('[data-rad]'); if (rb) { radioAnswer(rb.dataset.rad === '1'); return; } const b = e.target.closest('[data-orsel]'), row = e.target.closest('[data-car]'); if (b && row) { follow(+row.dataset.car); renderSide(true); renderHud(); renderOrders(true); } });
 $('#hudOrders').addEventListener('change', (e) => {
@@ -11640,6 +11791,7 @@ $('#hudOrders').addEventListener('change', (e) => {
   const c = S.race.cars[+row.dataset.car], v = sel.value;
   if (sel.dataset.os === 'pace') doOrder(c, v);
   else if (sel.dataset.os === 'tac') doOrder(c, 'tac-' + v);
+  else if (v === 'stop-1' || v === 'stop+1') doOrder(c, v);
   else if (v) doPit(c, v);
   sel.blur(); renderOrders(true); renderWall(true);
 });
@@ -11678,6 +11830,7 @@ function renderHud() {
   updateView();
   renderOrders(); renderWeather();
   $('#hOrd').style.display = mgrTeam() ? '' : 'none'; $('#hOrd').classList.toggle('on', !S.ordersHide);
+  $('#hPits').style.display = mgrTeam() ? '' : 'none'; $('#hPits').innerHTML = `<span>🅿</span>Paradas: ${S.settings.manualPits ? 'manuales' : 'automáticas'}`;
   { // lo que queda a la derecha de la torre: la franja de dirección de carrera, las repeticiones y los mensajes
     const L = $('#hudList'), vr = $('#view').getBoundingClientRect(), lr = L.classList.contains('off') ? null : L.getBoundingClientRect();
     const right = lr && lr.width ? Math.round(lr.right - vr.left + 6) : 8, V = $('#view');
@@ -11695,13 +11848,22 @@ function renderHud() {
 
 // ---------------- Novedades ----------------
 const CHANGELOG = [
+  { v: '1.15', items: [
+    '⏩ «Simular clasificación» al lado de «Ir a la parrilla»: toda la clasificación de golpe (Q1, Q2 y Q3 o la de 1-2 vueltas) y sale la parrilla con quién cayó en cada ronda. «Simular el resto» tras una ronda en pista también enseña la parrilla final, con tiempos que casan con los de pista',
+    '📱 Lo de arriba del todo (barras, pestañas, botón de salir de la carrera) se aparta de la cámara del móvil y de la zona de la barra de notificaciones, y en pantallas táctiles es algo más alto',
+    '🎧 El Muro va dentro de la barra de órdenes: en el desplegable de Box sale la parada prevista (p. ej. «Box · v23→M») y se puede adelantar o retrasar una vuelta; los avisos (gomas al límite, llueve, falta el otro compuesto, tu compañero va más rápido) salen en una línea debajo. Paradas automáticas o manuales, en el menú ⋯. Sin el botón 🎧, los de abajo son más grandes',
+    '🚩 Banderas más realistas: muchos menos VSC por un par de trozos sueltos (eran la mayoría), más safety car tras un accidente, y si varios coches se quedan parados en la pista (choque múltiple, atasco tras un trompo) sale safety car o, si es gordo, bandera roja. Un coche parado en plena pista que no se mueve: VSC o safety car',
+    '🧩 Los pilotos esquivan los restos que ven venir (los más finos casi siempre; en plena lucha, rueda con rueda o con lluvia, peor). Si no los ven o no hay hueco, los pisan y pueden pinchar',
+  ] },
   { v: '1.14', items: [
     '🧠 Academia: nuevas etapas 3 (Tendencias) y 4 (Afinar). Antes, a partir de la generación 31 se movían los ~1.900 números de la red a la vez y la suerte de las carreras tapaba lo que funcionaba (lo medí: la variante «buena» repetía en otra tanda de carreras como una moneda al aire)',
     '🎚 Etapa 3 · Tendencias (10 generaciones): solo se ajustan las 19 tendencias (cuánto ataca, batería, gomas, cuándo parar…). Etapa 4 · Afinar (20 generaciones): la última capa, cómo reacciona a cada situación, que es donde más señal dio la prueba. Cambian de una a otra solas',
     '⏱ En las etapas 3 y 4 el entrenamiento también puntúa el TIEMPO (respecto al coche mediano y al compañero que lleva el rival), no solo el puesto: el puesto va a saltos y depende mucho de la suerte; el tiempo deja ver mucho mejor qué variante va más rápida',
     '🎭 El carácter de cada piloto está en la parte de dentro de la red, que en las etapas 3 y 4 no se toca. Además, una versión que pierda más de 10 puntos de «fiel al carácter» ya no cuenta como mejor aunque gane más',
     '↩ Al cerrar cada etapa, si sus exámenes salen de media claramente peor (6 puntos) que la mejor versión, vuelve a ella y sigue con la etapa siguiente',
-    '🏆 Clasificación de redes: marca las que tienen un «examen antiguo» (de una versión anterior del juego) para que las vuelvas a examinar antes de compararlas',
+    '🏆 Clasificación de redes: cada red sale con el Elo de su MEJOR versión (antes, el de la última aunque fuese peor). Arriba las examinadas con esta versión del juego; abajo, apartadas, las de «examen antiguo», que no se pueden comparar hasta que las vuelvas a examinar',
+    '🏅 Mejor versión: si empata en nota, gana la de más duelos ganados. Una mejor versión de un examen antiguo deja de contar en cuanto la red se examina con la versión de ahora',
+    '🆕 Al subir una versión nueva a GitHub, el juego la baja solo y te avisa con «Recargar» (antes no se veía hasta cerrarlo y abrirlo dos veces)',
   ] },
   { v: '1.13.1', items: [
     '🧠 Academia: la red aprende a GANAR más que a ahorrar batería. En el premio del entrenamiento la gestión (batería y gomas) pesa 0,4 veces lo de antes y ganar al compañero con el mismo coche pesa más (±1 en vez de ±0,7)',
@@ -12622,7 +12784,7 @@ function showErasResults(r, res) {
 }
 
 window.__legDbg = { legAfterRace, legSeasonEnd, carRank, legProgress }; // para las pruebas
-window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
+window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
 
 // ---- salón de la fama: las leyendas con sus récords reales, más lo que hagan en el juego ----
 function famaLegends(F) {
@@ -13146,9 +13308,13 @@ function examDone() {
     if (!ex.vs) {
       const est = 1000 + eloGap(p);
       n.elo = n.elo === undefined ? est : Math.round(0.5 * n.elo + 0.5 * est);
+      n.exams[n.exams.length - 1].elo = Math.round(est); // v1.14: el Elo de cada versión examinada (la clasificación usa el de la mejor)
       // v1.14: una versión que gana más pero pierde el carácter de los pilotos (fiel al carácter 10 puntos peor) no cuenta como mejor
       const fidOK = R.fid === null || R.fid === undefined || !n.best || n.best.fid === null || n.best.fid === undefined || R.fid >= n.best.fid - 10;
-      if (!n.best || (fidOK && (R.nota !== undefined && n.best.nota !== undefined ? R.nota > n.best.nota : R.pct > n.best.pct))) { n.best = { g: ex.gen, pct: R.pct, nota: R.nota, margin: R.margin, fid: R.fid, data: ex.snap, w13: true }; n.worse = 0; if (ex.auto) flash(`🏅 NUEVA MEJOR VERSIÓN: G${ex.gen} · nota ${R.nota ?? R.pct}`, 1800); }
+      // v1.14: si la mejor versión guardada es de un examen antiguo (otra versión del juego, sin nota), no se puede comparar:
+      // el primer examen de ahora pasa a ser la referencia
+      const oldBest = !!n.best && n.best.nota === undefined && R.nota !== undefined;
+      if (!n.best || oldBest || (fidOK && (R.nota !== undefined && n.best.nota !== undefined ? R.nota > n.best.nota || (R.nota === n.best.nota && R.pct > n.best.pct) : R.pct > n.best.pct))) { n.best = { g: ex.gen, pct: R.pct, nota: R.nota, margin: R.margin, fid: R.fid, elo: Math.round(est), data: ex.snap, w13: true }; n.worse = 0; if (ex.auto) flash(`🏅 NUEVA MEJOR VERSIÓN: G${ex.gen} · nota ${R.nota ?? R.pct}`, 1800); }
       // v1.13: si dos exámenes seguidos salen claramente peor que la mejor versión, se vuelve a ella y se aprende con pasos más cortos
       else if (ex.auto && n.best.nota !== undefined && R.nota !== undefined && n.best.data && R.nota <= n.best.nota - Math.max(6, R.margin ?? 7)) { // solo si cae más que el margen de error del examen (el récord de la mejor versión suele ser una tirada con suerte)
         n.worse = (n.worse || 0) + 1;
@@ -13233,8 +13399,13 @@ function examHTML() {
     h += '</div>';
   } else if (!ex) h += '<div class="note">27 carreras fijas en 9 categorías (rápidos, lentos y urbanos, lluvia, tiempo cambiante, safety car, remontada, aguantar delante, carrera larga y circuitos nunca vistos). En cada escudería un coche lleva la red y el otro el rival, y luego al revés. Más de un 50 % es que la red es mejor. Mientras entrenas se hace solo cada 10 generaciones.</div>';
   if (n && n.best) h += `<div class="ac-row" style="margin-top:6px"><span>🏅 Mejor versión de esta red: <b>G${n.best.g}</b> (${n.best.nota !== undefined ? 'nota ' + n.best.nota : n.best.pct + '%'})</span>${n.best.g !== S.trainer.gen && n.best.data ? '<button class="btn ghost" id="acBest">↩ Volver a ella</button>' : '<span class="muted">(es la actual)</span>'}</div>`;
-  const ranked = S.nets.list.filter((x) => x.elo !== undefined).sort((a, b) => b.elo - a.elo);
-  if (ranked.length) h += `<h3 style="margin-top:12px">🏆 Clasificación de redes</h3><div class="exk">` + [{ name: 'Las reglas', elo: 1000, rules: true }].concat(ranked).sort((a, b) => b.elo - a.elo).map((x, i) => `<span>${i + 1}.</span><span>${x.rules ? '<i class="muted">Las reglas</i>' : esc(x.name) + ' · G' + netGen(x) + (oldExam(x) ? ' <small class="muted">· examen antiguo</small>' : '')}</span><b>${x.elo}</b>`).join('') + '</div><div class="note">Puntos tipo ajedrez: las reglas valen 1000. Se actualizan con cada examen (contra las reglas o contra otra red).' + (ranked.some(oldExam) ? ' Las de «examen antiguo» se midieron con una versión anterior del juego (otros pilotos y otras reglas de carrera): para compararlas de verdad, actívalas y examínalas otra vez.' : '') + '</div>';
+  const ranked = S.nets.list.filter((x) => x.elo !== undefined).map((x) => Object.assign({}, x, bestElo(x)));
+  // v1.14: arriba, las que se han examinado con esta versión del juego (comparables entre sí y con las reglas); abajo, las de examen antiguo
+  const cur = ranked.filter((x) => !x.old).concat([{ name: 'Las reglas', r: 1000, rules: true }]).sort((a, b) => b.r - a.r), old = ranked.filter((x) => x.old).sort((a, b) => b.r - a.r);
+  const row = (x, i) => `<span>${i + 1}.</span><span>${x.rules ? '<i class="muted">Las reglas</i>' : esc(x.name) + ' · G' + x.rg + (x.isBest ? ' <small class="muted">(su mejor versión)</small>' : '')}</span><b>${x.r}</b>`;
+  if (ranked.length) h += `<h3 style="margin-top:12px">🏆 Clasificación de redes</h3><div class="exk">` + cur.map(row).join('') + '</div>'
+    + (old.length ? `<div class="note" style="margin-top:8px">Con examen antiguo (de una versión anterior del juego, con otras reglas de carrera): sus puntos no se pueden comparar con los de arriba. Para meterlas en la clasificación, actívalas y hazles un examen.</div><div class="exk" style="opacity:.55">` + old.map(row).join('') + '</div>' : '')
+    + '<div class="note">Puntos tipo ajedrez: las reglas valen 1000. Cada red sale con su mejor versión (la que guarda «↩ Volver a ella»), con el Elo de su examen contra las reglas.</div>';
   return h;
 }
 
@@ -15819,6 +15990,19 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && S.t
 boot();
 })();
 </script>
-<script>if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
+<script>if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => { setInterval(() => r.update().catch(() => {}), 30 * 60 * 1000); }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!had || document.getElementById('swNew')) return;
+    const d = document.createElement('div'); d.id = 'swNew';
+    d.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;background:#1b2230;color:#fff;border:1px solid #ff2e88;border-radius:10px;padding:10px 14px;font:14px system-ui;display:flex;gap:10px;align-items:center;box-shadow:0 6px 24px #0008';
+    d.innerHTML = '🆕 Hay una versión nueva del juego <button style="background:#ff2e88;color:#fff;border:0;border-radius:8px;padding:6px 10px;font:600 13px system-ui">Recargar</button><button style="background:none;color:#9aa3b2;border:0;font:13px system-ui">Luego</button>';
+    const [ok, no] = d.querySelectorAll('button');
+    ok.onclick = () => { try { if (window.__game && window.__saveNow) window.__saveNow(); } catch (e) {} setTimeout(() => location.reload(), 400); };
+    no.onclick = () => d.remove();
+    document.body.appendChild(d);
+  });
+}</script>
 </body>
 </html>

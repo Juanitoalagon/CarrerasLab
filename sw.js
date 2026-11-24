@@ -1,7 +1,7 @@
-// CarrerasLab 1.14: funciona sin conexión. Abre lo guardado al momento y, si hay internet, baja la versión nueva para la próxima vez.
-const CACHE = 'carreraslab-1.14';
+// CarrerasLab 1.15: funciona sin conexión. Abre lo guardado al momento y, si hay internet, baja la versión nueva para la próxima vez.
+const CACHE = 'carreraslab-1.15';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting())); }); // sin la caché del navegador: siempre la versión recién subida
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
