@@ -1267,7 +1267,9 @@ body.focus #msgs{bottom:calc(60px + var(--ordH,0px) + var(--sab))!important}
 }
 
 /* v1.18: ❗ de sanción en la torre; aviso de dirección de carrera debajo de la repetición (la repetición ya no baila) */
-#hudList .hpen{display:inline-block;margin-left:3px;width:12px;height:12px;border-radius:3px;background:#ffb020;color:#1a1200;font:900 10px/12px var(--num);text-align:center;font-style:normal;vertical-align:1px}
+/* v1.19: la ❗ va como insignia arriba a la derecha del nombre (antes saltaba de línea y descuadraba la torre) */
+#hudList .hn{position:relative;white-space:nowrap}
+#hudList .hpen{position:absolute;left:calc(100% - 5px);top:-3px;width:10px;height:10px;border-radius:3px;background:#ffb020;color:#1a1200;font:900 8px/10px var(--num);text-align:center;font-style:normal;box-shadow:0 0 0 1px #0b0d11;pointer-events:none}
 body.focus #rcMsg.on{top:calc(var(--rcT,48px) + var(--sat) + var(--topx))}
 
 /* v1.18: stats desplegables en las tarjetas de piloto */
@@ -1286,12 +1288,49 @@ body.focus #rcMsg.on{top:calc(var(--rcT,48px) + var(--sat) + var(--topx))}
 .or-info{font-size:11px;color:#c9d1dc;padding:1px 3px 2px 4px;line-height:1.3}
 .or-info b{font-weight:800}
 @media (orientation:landscape) and (max-height:520px){ .or-info{font-size:10px;padding:0 2px 1px 4px} }
+
+/* v1.19: escuela de pilotaje */
+.sc .note{margin-bottom:10px}
+.sc-pick{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+.sc-pick .sel{flex:1 1 150px;min-width:0}
+.sc-intro{font-size:13px;margin:4px 0 8px}
+.sc-stages{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.sc-st{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px;border-radius:10px;border:1px solid var(--line);background:#151920;color:inherit;font:inherit;position:relative;min-width:0}
+.sc-st .n{position:absolute;top:6px;right:8px;font:700 11px var(--num);opacity:.5}
+.sc-st b{font-size:14px}
+.sc-st small{font-size:11px;line-height:1.3;opacity:.7}
+.sc-st em{font-style:normal;font-size:11px;color:#7be07b;margin-top:2px}
+.sc-st.cur{border-color:#ff2e88;box-shadow:inset 0 0 0 1px #ff2e88}
+.sc-st.ok b{color:#7be07b}
+.sc-st:disabled{opacity:.45}
+.sc-status{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0}
+.sc-status .dot.live{width:8px;height:8px;border-radius:50%;background:#ff2e88;animation:scPulse 1.2s ease-in-out infinite}
+@keyframes scPulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.sc-status .dot.live{animation:none}}
+.sc-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0}
+.sc-nums div{background:#151920;border-radius:10px;padding:8px}
+.sc-nums b{display:block;font:700 20px var(--num);font-variant-numeric:tabular-nums}
+.sc-nums b.up{color:#7be07b}.sc-nums b.dn{color:#ff8a8a}
+.sc-nums span{font-size:11px;opacity:.75}
+.sc-vis{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center}
+.sc-chart,.sc-map{width:100%;height:150px;background:#11151b;border-radius:10px}
+.sc-ax{fill:#8f98a8;font:10px var(--num)}
+.sc-empty{font-size:12px;padding:10px;background:#11151b;border-radius:10px;height:150px;box-sizing:border-box}
+.sc-leg{font-size:11px;display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:4px 0}
+.sc-leg span{display:inline-block;width:18px;height:3px;border-radius:2px}
+.sc-leg .l1{background:repeating-linear-gradient(90deg,#8f98a8 0 4px,transparent 4px 7px)}.sc-leg .l2{background:#ff2e88;margin-left:8px}
+.sc-apt{font-size:12px;margin:8px 0;line-height:1.5}
+.sc-act{margin:10px 0}
+.sc-tab{width:100%;font-size:12px;border-collapse:collapse}
+.sc-tab td,.sc-tab th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}
+@media (max-width:520px){.sc-stages{grid-template-columns:1fr}.sc-vis{grid-template-columns:1fr}}
+@media (max-width:520px){.sc-map{height:230px}}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.18 · FASE 18</small></div>
+    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.19 · FASE 19</small></div>
     <button class="btn" id="btnMenu" title="Menú: todas las opciones">☰<span class="long"> Menú</span></button>
     <div id="raceinfo">
       <div class="lap"><span id="lapLbl">VUELTA</span> <b id="lapNow">–</b><span>/<b id="lapTot">–</b></span></div>
@@ -1969,6 +2008,66 @@ function riskLogit(a, c, tr) {
 //  CEREBRO POR REGLAS (fase 1). En la fase 2 se sustituye por una red.
 //  Recibe lo que "ve" el piloto y devuelve decisiones.
 // =====================================================================
+// =====================================================================
+//  v1.19: ESCUELA DE PILOTAJE: lo que un piloto sabe de cada circuito
+//  Por curva: confianza en el paso por curva, confianza en la frenada y anchura de trazada; por recta: dónde gastar batería.
+//  0 = lo de siempre (la trazada de manual); negativo = no conoce el circuito (va con miedo y por el centro);
+//  positivo = apura más que el manual. Lo que se aprovecha de esa confianza lo marcan sus stats.
+// =====================================================================
+const KN_C = 4; // por curva: paso por curva, frenada, anchura de trazada y cuánto de eso se atreve a usar con tráfico
+const knSize = (T) => T.corners.length * (KN_C + 2);
+const KN_ROOKIE = [-0.5, -0.5, -1.1, 0]; // lo que «sabe» de un circuito quien nunca ha corrido en él
+function knApt(stats) {
+  const st = stats || {}, a = (k) => clamp(((st[k] ?? 75) - 45) / 50, 0.15, 1);
+  return { fast: a('rapidas'), slow: a('lentas'), brake: a('frenada'), line: 0.6 + 0.4 * a('consistencia'), energy: a('energia') };
+}
+function buildKn(T, th, apt) {
+  const N = T.N, nc = T.corners.length, ds = T.ds;
+  apt = apt || { fast: 1, slow: 1, brake: 1, line: 1, energy: 1 };
+  const gC = new Float32Array(N), bC = new Float32Array(N), tC = new Float32Array(N), lwS = new Float32Array(N), wS = new Float32Array(N), dep = new Float32Array(N);
+  const ramp = Math.round(25 / ds);
+  for (let j = 0; j < nc; j++) {
+    const cr = T.corners[j], a0 = mod(cr.brake - Math.round(10 / ds), N), len = mod(cr.exit - a0, N) + Math.round(10 / ds);
+    const g = Math.tanh(th[KN_C * j] || 0), b = Math.tanh(th[KN_C * j + 1] || 0), lw = Math.tanh(th[KN_C * j + 2] || 0), tc = Math.max(0, Math.tanh(th[KN_C * j + 3] || 0));
+    const ag = cr.vApex > 45 ? apt.fast : apt.slow;
+    const gE = g > 0 ? g * ag : g, bE = b > 0 ? b * apt.brake : b, lE = lw > 0 ? lw * apt.line : lw;
+    for (let q = -ramp; q <= len + ramp; q++) {
+      const i = mod(a0 + q, N), wgt = q < 0 ? 1 + q / ramp : q > len ? 1 - (q - len) / ramp : 1;
+      if (wgt <= 0) continue;
+      if (Math.abs(wgt * gE) > Math.abs(gC[i])) gC[i] = wgt * gE;
+      if (Math.abs(wgt * bE) > Math.abs(bC[i])) bC[i] = wgt * bE;
+      if (wgt * tc > tC[i]) tC[i] = wgt * tc;
+      lwS[i] += wgt * lE; wS[i] += wgt;
+    }
+    // recta que sale de esta curva hasta la frenada de la siguiente: cuánto le compensa gastar batería ahí
+    // (dos tramos por recta: la salida de la curva, donde la batería empuja más, y el final de la recta)
+    const nx = T.corners[(j + 1) % nc], st = mod(cr.exit - Math.round(15 / ds), N), sl = mod(nx.brake - st, N), ek = 0.5 + 0.5 * apt.energy;
+    const d1 = Math.tanh(th[KN_C * nc + 2 * j] || 0) * ek, d2 = Math.tanh(th[KN_C * nc + 2 * j + 1] || 0) * ek, cut = Math.round(sl * 0.45);
+    for (let q = 0; q < sl; q++) dep[mod(st + q, N)] = q < cut ? d1 : d2;
+  }
+  // trazada: si no cambia la anchura, la de manual tal cual
+  if (!lwS.some((x) => Math.abs(x) > 1e-4)) return { d: T.dRL, k: T.kRL, dR: T.dRL, kR: T.kRL, gC, bC, tC, dep };
+  // más estrecha que la de manual: hasta un 25 % (el novato va por el centro); más ancha, solo un poco (la de manual ya
+  // apura hasta casi el piano: medido en v1.16, más al borde los coches se salían mucho más en carrera)
+  const lim = T.hw - 1.2;
+  // dos trazadas: la de vuelta lanzada (clasificación) y la de carrera, que apura algo menos los pianos
+  const line = (wide) => {
+    const d = new Float64Array(N), px = new Float64Array(N), py = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const lw = wS[i] > 0 ? lwS[i] / wS[i] : 0, L = Math.max(lim, Math.abs(T.dRL[i]));
+      d[i] = lw < 0 ? T.dRL[i] * (1 + 0.25 * lw) : clamp(T.dRL[i] * (1 + 0.05 * lw * wide), -L, L);
+      px[i] = T.cx[i] + T.nx[i] * d[i]; py[i] = T.cy[i] + T.ny[i] * d[i];
+    }
+    return { d, k: smoothClosed(curvatureOf(px, py, 3), 3) };
+  };
+  const Q = line(1), Rc = lwS.some((x) => x > 1e-4) ? line(0.35) : Q;
+  return { d: Q.d, k: Q.k, dR: Rc.d, kR: Rc.k, gC, bC, tC, dep };
+}
+// confianza → agarre y frenada que se atreve a usar (con margen hasta el límite real)
+let KN_GMAX = 0.999;
+const knG = (g, x) => (x > 0 ? Math.max(g, g + (KN_GMAX - g) * 0.85 * x) : g * (1 + 0.05 * x));
+const knB = (b, x) => (x > 0 ? Math.max(b, b + (1 - b) * 0.8 * x) : b * (1 + 0.07 * x));
+
 const RuleBrain = {
   name: 'reglas',
   decide(o, p) {
@@ -2216,6 +2315,8 @@ class Race {
         yaw: 0, yawV: 0, recover: null, avoid: null, lame: false, obst: null,
         st: stratFromZ(this.o.strat && this.o.strat[en.team.id]),
       };
+      // v1.19: lo que sabe de este circuito (escuela de pilotaje)
+      { const kn = this.o.kn && this.o.kn[en.driver.id]; if (kn && kn.th && kn.th.length === knSize(T)) { try { c.kn = buildKn(T, kn.th, knApt(en.driver.stats)); } catch (e) { c.kn = null; } } }
       if (this.o.flying) {
         c.sTot = -150; c.v = 45; c.d = T.dRL[mod(Math.round(-150 / T.ds), T.N)];
         c.tyre = this.o.startTyre || 'S'; c.tT = 0.85;
@@ -2568,13 +2669,28 @@ class Race {
   // ---------------- safety car ----------------
   deploySC(reason) {
     if (this.o.noSC || this.o.flying || this.sc || this.startT === null || this.phase !== 'racing') return;
+    // v1.19: en carreras cortas había safety car casi en cada carrera (hasta 4 en 11 vueltas). Por causas menores
+    // (restos, un coche parado) se tira del virtual si ya hubo uno hace poco o si la carrera es corta
+    {
+      const minor = !/accidente|múltiple/.test(reason), lead = this.order && this.order[0];
+      const sinceLast = this.greenT ? (this.t - this.greenT) / Math.max(40, this.T.refLap || 80) : 99; // vueltas desde la última relanzada
+      const short = this.o.laps <= 15;
+      if (!this.o.forceSC && (minor && (sinceLast < 3 || (short && this.rng() < 0.35)) || (short && this.scCount >= 2 && !/múltiple/.test(reason)) || sinceLast < 1)) {
+        if (!this.vsc && lead) this.deployVSC(reason); return;
+      }
+    }
     this.vsc = null;
     const run = this.order.filter((x) => !x.dnf && !x.finished);
     if (!run.length) return;
     const leader = run[0];
     if (this.o.laps - leader.lapsDone < 1.5) return;
     // el safety car espera en la salida de boxes hasta que llega el líder
-    this.sc = { phase: 'wait', sTot: null, d: this.T.pit.d, v: 0, t0: this.t, clearAt: null, endS: null };
+    // v1.19: lo que dura depende de lo que haya que limpiar (antes siempre ~2 vueltas): unos restos se recogen enseguida;
+    // un coche en el muro o un choque múltiple llevan más
+    const sev = /múltiple/.test(reason) ? 1.2 : /accidente/.test(reason) ? 0.9 : /parado/.test(reason) ? 0.6 : /restos/.test(reason) ? 0.3 : 0.7;
+    // los comisarios empiezan a limpiar desde que sale (antes contaba desde que el líder alcanzaba al safety car)
+    const clearAt = this.t + (30 + 70 * sev) * (0.7 + 0.6 * this.rng()) * (this.o.laps <= 12 ? 0.8 : 1);
+    this.sc = { phase: 'wait', sTot: null, d: this.T.pit.d, v: 0, t0: this.t, clearAt, endS: null, sev };
     this.scCount++;
     for (const c of this.cars) if (c.mode === 'attack' || c.mode === 'defend') { c.mode = 'normal'; c.wT = 1; }
     this.ev({ type: 'sc', on: true, reason });
@@ -2588,10 +2704,11 @@ class Race {
       if (!lead) return;
       const gate = PIT.exit - 30; // donde espera, al final del carril
       const toGate = mod(gate - mod(lead.sTot, L), L);
-      if (toGate > 140 && toGate < 260) {
-        sc.phase = 'out';
+      // v1.19: si el líder está a más de media vuelta, el safety car sale ya y espera rodando despacio (antes esperaba
+      // en el carril hasta que pasaba el líder: más de una vuelta entera neutralizada antes de empezar)
+      if ((toGate > 140 && toGate < 260) || (toGate > 0.5 * L && this.t - sc.t0 > 4)) {
+        sc.phase = 'out'; sc.catchUp = toGate > 260;
         sc.sTot = lead.sTot + toGate; sc.v = 12; sc.d = PIT.d;
-        sc.clearAt = this.t + 50 + this.rng() * 30; // al menos una vuelta larga detrás del coche de seguridad
         this.ev({ type: 'sc_pista' });
       }
       return;
@@ -2601,13 +2718,14 @@ class Race {
     if (sc.phase === 'in' && sc.endS !== null && sc.sTot > sc.endS + PIT.entry - 80) sc.d += (PIT.d - sc.d) * Math.min(1, dt * 1.5);
     else sc.d += (dT - sc.d) * Math.min(1, dt * 0.9);
     const i = Math.floor(mod(sc.sTot, T.L) / T.ds) % T.N;
-    const target = Math.min(52, T.vRL[i] * 0.66 * (1 - 0.25 * this.wx.wet));
+    if (sc.catchUp) { const ld = this.order.find((x) => !x.dnf && !x.finished && !x.pit); if (!ld || sc.sTot - ld.sTot < 260) sc.catchUp = false; }
+    const target = Math.min(52, T.vRL[i] * (sc.catchUp ? 0.42 : 0.66) * (1 - 0.25 * this.wx.wet));
     // mirar hacia delante para frenar a tiempo
     let lim = target;
     for (let j = 1; j < 40; j++) { const q = (i + j) % T.N; const vq = Math.min(52, T.vRL[q] * 0.66 * (1 - 0.25 * this.wx.wet)); lim = Math.min(lim, Math.sqrt(vq * vq + 2 * 9 * j * T.ds)); }
     sc.v = sc.v < lim ? Math.min(lim, sc.v + 6 * dt) : Math.max(lim, sc.v - 12 * dt);
     sc.sTot += sc.v * dt;
-    if (sc.phase === 'out' && this.t > sc.clearAt && this.cars.every((c) => !c.dnf || c.hidden) && !this.cars.some((c) => c.spin || c.recover)) {
+    if (sc.phase === 'out' && !sc.catchUp && this.t > sc.clearAt && this.cars.every((c) => !c.dnf || c.hidden) && !this.cars.some((c) => c.spin || c.recover)) {
       sc.phase = 'in';
       sc.endS = (Math.floor((sc.sTot + 200) / T.L) + 1) * T.L;
       this.ev({ type: 'sc_in' });
@@ -3065,7 +3183,8 @@ class Race {
       c.inLane = !!(c.pit && Math.abs(c.d) > hw + 2.5);
       c.ghost = c.hidden || c.parked;
       c.lame = !c.pit && !c.finished && (!!c.spin || !!c.recover || !!c.stallNow || (!!c.dnf && !c.parked) || c.punct || c.powerLoss < 1
-        || c.dmg.su > 0.45 || c.dmg.fw > 0.55 || c.dmg.sp >= 0.55 || (started && t - this.startT > 8 && c.v < 12 && Math.abs(c.d) < hw + 3));
+        || c.dmg.su > 0.45 || c.dmg.fw > 0.55 || c.dmg.sp >= 0.55 || (started && t - this.startT > 8 && c.v < (this.sc || this.vsc || this.scEnding ? 3 : 12) && Math.abs(c.d) < hw + 3));
+      // v1.19: con safety car todos van despacio: antes el que bajaba de 43 km/h contaba como «tocado», salía de la fila y le adelantaban
     }
     // banderas amarillas donde hay un coche parado o la grúa trabajando
     const yz = [];
@@ -3090,7 +3209,7 @@ class Race {
     const follow = started && t - this.startT > 22 && !this.quali;
     for (let i = 0; i < n; i++) {
       const c = cars[i];
-      c.ahead = null; c.behind = null; c.aheadSame = null; c.side = []; c.obst = null; c.flyBehind = null;
+      c.ahead = null; c.behind = null; c.aheadSame = null; c.side = []; c.nearL = []; c.obst = null; c.flyBehind = null;
       if (c.ghost) continue;
       let ba = 1e9, bb = 1e9, bs = 1e9, bo = 1e9;
       for (let j = 0; j < n; j++) {
@@ -3101,6 +3220,7 @@ class Race {
         const dl = o.d - c.d;
         const mixed = !!o.pit !== !!c.pit; // uno va a boxes y el otro no: no se cierran el paso
         if (Math.abs(dsw) < P.carLen + 1.2 && !mixed) c.side.push({ car: o, dsw, dl });
+        if (Math.abs(dsw) < P.carLen + 3.5 && !mixed && Math.abs(dl) < P.carWid + 4) c.nearL.push(o); // v1.19: para no cerrarse encima de nadie
         if (o.lame && !o.dnf && dsw > -P.carLen && dsw < 160 && dsw < bo && Math.abs(dl) < P.carWid + 2.4) { bo = dsw; c.obst = { car: o, dsw }; }
         else if (o.dnf && !o.parked && dsw > -P.carLen && dsw < 160 && dsw < bo && Math.abs(dl) < P.carWid + 2.4) { bo = dsw; c.obst = { car: o, dsw }; }
         if (dsw > 0 && dsw < 70) {
@@ -3132,6 +3252,8 @@ class Race {
     for (let i = 0; i < n; i++) {
       const c = cars[i], p = c.p;
       const idx = this.idxOf(c);
+      const qLine = this.quali || this.o.flying, KN = c.kn; // v1.19: su trazada (escuela de pilotaje)
+      const KD = KN ? (qLine ? KN.d : KN.dR) : T.dRL, KK = KN ? (qLine ? KN.k : KN.kR) : T.kRL;
 
       // ---- salida ----
       if (!started) { c.v = 0; continue; }
@@ -3258,6 +3380,11 @@ class Race {
         // batería: lo que decide el piloto (o la orden del muro: gastar / guardar)
         c.boostWant = this.quali ? (c.qState === 'fly' ? 1 : 0) : this.o.flying ? 1 : c.batOrder === 'gasta' ? 1 : c.batOrder === 'guarda' ? 0
           : c.tactic === 'atacar' && c.ahead && c.ahead.gap < 45 ? 1 : c.tactic === 'defender' && c.behind && c.behind.gap < 45 ? 1 : c.tactic === 'defender' || c.tactic === 'atacar' ? 0 : dec ? (dec.boost ?? 0) : 0;
+        // v1.19: yendo solo y sin órdenes, gasta la batería donde ha aprendido que más rinde (escuela de pilotaje, etapa 3)
+        if (KN && !this.quali && !this.o.flying && !c.batOrder && (!c.tactic || c.tactic === 'libre') && c.mode === 'normal' && !(c.ahead && c.ahead.gap < 45) && !(c.behind && c.behind.gap < 45) && this.o.laps - c.lapsDone > 1) {
+          const dv = KN.dep[idx];
+          if (dv > 0.1 && c.bat > 0.22 - 0.18 * dv) c.boostWant = 1; else if (dv < -0.1 || c.bat < 0.06) c.boostWant = 0;
+        }
         // v1.6: levantar el pie, distancia al de delante, línea de lluvia y pedir la parada
         c.liftOn = !!dec && !this.quali && !this.o.flying && (dec.lift ?? 0) > 0.5 && c.batOrder !== 'gasta';
         c.hangOn = !!dec && (dec.hang ?? 0) > 0.5;
@@ -3564,16 +3691,22 @@ class Race {
           pudA = pd;
         }
       }
+      const inTr = !!KN && (c.side.length > 0 || (c.ahead && c.ahead.gap < 18) || (c.behind && c.behind.gap < 8)); // v1.19: con tráfico, su cautela aprendida
       // (de cerca punto a punto; más lejos, de dos en dos: la curvatura cambia suave y así se ahorra la mitad del cálculo)
       for (let j = 0; j <= H; j += j < 14 ? 1 : 2) {
         const q = (idx + j) % N;
-        let kq = w * T.kRL[q] + (1 - w) * this.laneK(q, j === 0 ? c.d : c.dLane);
+        let kq = w * KK[q] + (1 - w) * this.laneK(q, j === 0 ? c.d : c.dLane);
         // v1.8.1: si está cambiando de línea (volviendo a la trazada, abriéndose…), frena para la más cerrada de las dos:
         // antes calculaba la velocidad para la línea que llevaba, la cambiaba a mitad de curva y se iba largo y fuera sin motivo
-        if (j > 0 && c.wT !== w) { const k2 = c.wT * T.kRL[q] + (1 - c.wT) * this.laneK(q, c.dLane); if (Math.abs(k2) > Math.abs(kq)) kq = k2; }
-        const vc = cornerSpeed(kq, pudA && T.puddleId[q] === pudA.id ? gPud : g, aeroSeen);
+        if (j > 0 && c.wT !== w) { const k2 = c.wT * KK[q] + (1 - c.wT) * this.laneK(q, c.dLane); if (Math.abs(k2) > Math.abs(kq)) kq = k2; }
+        // (en carrera se guarda algo de margen: solo en clasificación y vuelta lanzada se va al límite de lo aprendido;
+        // con coches cerca, solo lo que ha aprendido en la etapa «Limpio» que puede apurar sin tocarse)
+        const xg0 = KN ? KN.gC[q] : 0, xb0 = KN ? KN.bC[q] : 0, rK = (qLine ? 1 : 0.45) * (inTr ? KN.tC[q] : 1);
+        const xg = KN ? (xg0 > 0 ? xg0 * rK : xg0) : 0, xb = KN ? (xb0 > 0 ? xb0 * rK : xb0) : 0;
+        const gq = xg ? knG(g, xg) : g, bq = xb ? knB(b, xb) : b;
+        const vc = cornerSpeed(kq, pudA && T.puddleId[q] === pudA.id ? gPud : gq, aeroSeen);
         if (vc >= vAllow) continue;
-        const va = brakeReach(vc, Math.max(0, j * ds - frac), b);
+        const va = brakeReach(vc, Math.max(0, j * ds - frac), bq);
         if (va < vAllow) vAllow = va;
       }
       if (c.punct) vAllow = Math.min(vAllow, Math.max(30, 0.68 * T.vRL[idx])); // v1.16: con pinchazo, a un ~68 % (antes 108 km/h fijos: costaba casi una vuelta)
@@ -3601,6 +3734,9 @@ class Race {
       } else if (c.yieldLap) { c.yieldLap = false; if (c.mode === 'normal') c.wT = 1; }
       if (c.yellowNear) vAllow = Math.min(vAllow, Math.max(25, vAllow * 0.92));
       if (this.vsc && !c.pit) vAllow = Math.min(vAllow, 0.64 * T.vRL[idx]); // VSC: todos al mismo ritmo lento
+      // v1.19: con VSC o safety car no se adelanta (salvo a uno tocado o que entra en boxes): se queda detrás del de delante
+      if ((this.vsc || this.sc || this.scEnding) && !c.pit && c.ahead && !c.ahead.car.lame && !c.ahead.car.pit && !c.ahead.car.dnf && c.ahead.car.lapsDone <= c.lapsDone + 1 && c.ahead.gap < 40)
+        vAllow = Math.min(vAllow, Math.max(0, c.ahead.car.v + (c.ahead.gap - 8) * 0.6));
       if (this.red && this.red.phase === 'in') vAllow = Math.min(vAllow, 0.45 * T.vRL[idx]); // bandera roja: a boxes despacio
       if (approachPit && sR > -260) vAllow = Math.min(vAllow, brakeReach(PIT.speed, Math.max(0, PIT.limitIn - sR), b * 0.85));
       // boxes: límite de velocidad y parada en el box
@@ -3765,7 +3901,10 @@ class Race {
         // la frenada del de delante; detrás del coche de seguridad, hueco amplio (antes se comían al de delante en las frenadas fuertes)
         const crF = T.corners[T.nextCorner[idx]], nearBrake = !!crF && mod(crF.brake - idx, N) * ds < c.v * 1.5 + 20;
         const neutral = this.sc || this.vsc || this.scEnding;
-        const gmin = ((prep ? (nearBrake ? 1.0 : 0.6) : 1.0 + (1 - p.aggr) * 2.0) + (early ? 1.5 : 0)) * (neutral ? 1 : (c.gapK || 1)) + (neutral ? 5 : 0);
+        // v1.19: atacando, mientras aún está detrás y solapado de lado (la rueda delantera contra la trasera del otro),
+        // deja algo más de hueco: era el toque más habitual (unos 20 por carrera)
+        const ovl = prep && Math.abs(c.aheadSame.car.d - c.d) < P.carWid * 1.02 ? (nearBrake ? 1.6 : 0.7) : 0;
+        const gmin = ((prep ? (nearBrake ? 1.0 : 0.6) + ovl : 1.0 + (1 - p.aggr) * 2.0) + (early ? 1.5 : 0)) * (neutral ? 1 : (c.gapK || 1)) + (neutral ? 5 : 0);
         const ah = c.aheadSame.car;
         const vf = ah.v + (c.aheadSame.gap - gmin) * (prep ? 2.6 : 1.3);
         // y anticiparse a la frenada del de delante (con un pelín de margen de reacción)
@@ -3842,7 +3981,7 @@ class Race {
       // ---- control longitudinal ----
       const offPre = Math.abs(c.d) - hw;
       const offGripPre = offPre > 0.6 && !c.pit ? Math.max(0.45, 1 - offPre * 0.06) : 1;
-      const kPre = c.pit ? 0 : w * T.kRL[idx] + (1 - w) * this.laneK(idx, c.d);
+      const kPre = c.pit ? 0 : w * KK[idx] + (1 - w) * this.laneK(idx, c.d);
       const exPre = v * v * Math.abs(kPre) - (P.mu + P.aero * aeroTrue * v * v) * gripK * offGripPre * (c.sliding ? 0.84 : 1) * (c.mistake ? 1 - c.mistake.sev : 1);
       const brakeCap = exPre > 0 ? Math.max(0.35, 1 - exPre / (0.5 * P.mu)) : 1;
       let nv = v;
@@ -3918,7 +4057,7 @@ class Race {
 
       // ---- control lateral ----
       const iL = (idx + Math.max(1, Math.round((v * 0.06) / ds))) % N; // v1.16: casi sin mirar adelante (con el ajuste de abajo ya no hace falta y cortaba los vértices)
-      let dDes = w * T.dRL[iL] + (1 - w) * c.dLane;
+      let dDes = w * KD[iL] + (1 - w) * c.dLane;
       // línea de lluvia: abrirse fuera de la goma de la trazada (hacia el exterior de la curva que viene)
       // salirse de la estela en la recta (y volver a la trazada antes de frenar)
       c.offWake = false;
@@ -3963,7 +4102,7 @@ class Race {
       else dDes = (lo + hi) / 2;
 
       // física lateral: si se pide más agarre del que hay, el coche se va hacia fuera
-      const kNow = c.pit ? 0 : w * T.kRL[idx] + (1 - w) * this.laneK(idx, c.d);
+      const kNow = c.pit ? 0 : w * KK[idx] + (1 - w) * this.laneK(idx, c.d);
       const aReq = nv * nv * Math.abs(kNow);
       const aPeak = (P.mu + P.aero * aeroTrue * nv * nv) * gripK * offGrip * (c.mistake ? 1 - c.mistake.sev : 1);
       if (!c.sliding && aReq > aPeak * 1.02) c.sliding = true;
@@ -3982,10 +4121,23 @@ class Race {
       // v1.16: seguir la trazada sin ir con retraso: se suma lo que se mueve la trazada en ese punto (hacia el vértice, hacia el piano).
       // Antes iba siempre por detrás: en las rectas un 20 % del tiempo a más de metro y medio de la trazada y fallaba 1 de cada 3 vértices
       const ffw = !c.pit && !c.avoid && !c.dbDodge && !c.pud && !c.weaving && !c.offWake && !c.side.length ? w : 0;
-      const ffv = ffw * nv * (T.dRL[(idx + 2) % N] - T.dRL[idx]) / (2 * ds);
+      const ffv = ffw * nv * (KD[(idx + 2) % N] - KD[idx]) / (2 * ds);
       c.dd += (14 * ctrl * (dDes - c.d) - (8 * ctrl + 0.8) * (c.dd - ctrl * ffv)) * dt;
       const ddMax = c.pit ? 14 : Math.min(14, Math.max(1.2, 0.5 * nv));
       c.dd = clamp(c.dd, -ddMax, ddMax);
+      // v1.19: no echarse encima del de al lado: la velocidad con la que se acerca de lado a un coche que tiene solapado
+      // (o casi) se limita para poder parar a un palmo. Era el origen de la mayoría de toques (al trazar la curva o al volver
+      // a la trazada tras adelantar, cerraban a 4-8 m/s sobre el otro)
+      if (!c.pit && started && !c.spin && !c.recover && c.nearL.length && !(c.duel && c.duel.squeeze)) {
+        for (const o of c.nearL) {
+          if (o.ghost || o.dnf || o.pit) continue;
+          const dl = o.d - c.d, sg = Math.sign(dl) || 1, gapL = Math.abs(dl) - P.carWid;
+          const own = c.dd * sg; // lo que se mueve él hacia el otro (lo que haga el otro lo limita el otro)
+          if (own <= 0) continue;
+          const allow = 0.7 * Math.sqrt(2 * 9 * Math.max(0, gapL - 0.35));
+          if (own > allow) c.dd -= sg * (own - allow) * 0.85;
+        }
+      }
       c.d += c.dd * dt;
       if (c.yaw !== 0 || c.yawV !== 0) {
         c.yawV += (-38 * c.yaw - 10 * c.yawV) * dt;
@@ -4060,7 +4212,7 @@ class Race {
             const kam = (a.p.tr.has('kamikaze') ? 1 : 0) + (b.p.tr.has('kamikaze') ? 1 : 0);
             // v1.8.1: la mitad que antes (había toques en casi cada curva que iban rueda con rueda); los buenos se tocan menos
             const clean = 1.35 - 0.5 * (a.p.cons + b.p.cons) / 2;
-            if (!(this.sc || this.vsc || this.scEnding) && rng() < dt * 0.06 * ag * clean * calm * (1 + kam) * (1 + ((a.sliding || b.sliding) ? 2 : 0) + wet)) forced = true; // v1.18: con safety car o VSC nadie va rueda con rueda
+            if (!(this.sc || this.vsc || this.scEnding) && rng() < dt * 0.038 * ag * clean * calm * (1 + kam) * (1 + ((a.sliding || b.sliding) ? 2 : 0) + wet)) forced = true; // v1.18: con safety car o VSC nadie va rueda con rueda
           }
         }
         if (forced || (Math.abs(dsw) < P.carLen * 0.95 && Math.abs(dl) < P.carWid * 0.95)) {
@@ -4409,7 +4561,7 @@ function pitBoxes(T, n) {
 function qualify(T, entries, seed, opts) {
   opts = opts || {};
   const out = entries.map((en, i) => {
-    const r = new Race(T, [en], { laps: 1, seed: (seed * 31 + i * 977) >>> 0, flying: true, weather: opts.weather || 'seco', temp: opts.temp, startTyre: opts.tyre || 'S', equalCars: !!opts.equalCars, setups: opts.setups ? [opts.setups[i]] : null });
+    const r = new Race(T, [en], { laps: 1, seed: (seed * 31 + i * 977) >>> 0, flying: true, weather: opts.weather || 'seco', temp: opts.temp, startTyre: opts.tyre || 'S', equalCars: !!opts.equalCars, setups: opts.setups ? [opts.setups[i]] : null, kn: opts.kn || null });
     if (opts.wet !== undefined) r.wx.wet = opts.wet;
     let guard = 0;
     while (!r.cars[0].finished && guard++ < 60 * 200) r.step(P.dt);
@@ -4418,7 +4570,7 @@ function qualify(T, entries, seed, opts) {
   return out.sort((a, b) => a.time - b.time);
 }
 
-const SIM = { realWeather, climateOf, TRACK_DRS, CLIMATE, boostFree, holdBase, offLineBase, defLineBase, crossBase, liftBase, hangBase, wetLineBase, boxBase, BAT, boostBase, wideBase, squeezeBase, saveBase, STRAT_KEYS, STRAT_RANGE, STRAT_DEFAULT_Z, stratFromZ, P, POINTS, COMPOUNDS, PIT_LOSS, tyreGrip, carParams, makeRng, buildTrack, validateTrack, splinePoints, poseAt, driverParams, RuleBrain, Race, qualify, pitBoxes, mod, clamp, wrapA };
+const SIM = { setKnGmax: (v) => { KN_GMAX = v; }, knSize, buildKn, knApt, KN_C, KN_ROOKIE, speedProfile, curvatureOf, smoothClosed, realWeather, climateOf, TRACK_DRS, CLIMATE, boostFree, holdBase, offLineBase, defLineBase, crossBase, liftBase, hangBase, wetLineBase, boxBase, BAT, boostBase, wideBase, squeezeBase, saveBase, STRAT_KEYS, STRAT_RANGE, STRAT_DEFAULT_Z, stratFromZ, P, POINTS, COMPOUNDS, PIT_LOSS, tyreGrip, carParams, makeRng, buildTrack, validateTrack, splinePoints, poseAt, driverParams, RuleBrain, Race, qualify, pitBoxes, mod, clamp, wrapA };
 if (typeof module !== 'undefined' && module.exports) module.exports = SIM;
 else global.SIM = SIM;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -5993,6 +6145,122 @@ const LEGEND_LIVERIES = [{ id: 'lotus', name: 'Negro y dorado (Lotus 72)', carCo
 const DATA = { LEGENDS, LEGEND_OF, FREE_AGENTS, LEGEND_TEAMS, LEGEND_JEFES, UNLOCKS, LEGEND_LIVERIES, TRACKS, TEAMS, DRIVERS, MODELS, ENVS, TRAITS, RARITY, NATIONS, overall, rarityOf, flagOf, makeDriver, seededRng, STRAT_TRAITS, STRAT_STATS, STAFF_ROLES, makeStrategist, stratOverall, fixDriver, fixCar, syncStats, F1_2026 };
 if (typeof module !== 'undefined' && module.exports) module.exports = DATA;
 else global.DATA = DATA;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script id="srcSchool">// =====================================================================
+//  v1.19: ESCUELA DE PILOTAJE
+//  Un piloto aprende cada circuito por etapas, como pedías: primero a ir rápido (vuelta lanzada solo),
+//  luego a ir limpio con tráfico y por último a gastar bien la batería en carrera.
+//  Lo que aprende (por curva y por recta) es lo que usa después en las carreras; lo que aprovecha lo marcan sus stats.
+//  Este archivo corre también dentro de los hilos de entrenamiento (sin pantalla).
+// =====================================================================
+(function (global) {
+  const SIM = global.SIM;
+  const STAGES = [
+    { id: 'rapido', ic: '⚡', name: 'Rápido', what: 'Solo en pista, vuelta lanzada: trazada, frenadas y paso por curva', mask: 'corner', sigma: 0.35, lr: 0.12, pairs: 8, maxG: 160, stall: 16 },
+    { id: 'limpio', ic: '🧽', name: 'Limpio', what: 'Con cinco rivales: en qué curvas puede apurar lo aprendido con coches cerca sin salirse ni tocarse', mask: 'traffic', sigma: 0.4, lr: 0.1, pairs: 6, maxG: 16, stall: 6 },
+    { id: 'bateria', ic: '🔋', name: 'Batería', what: 'Tanda de carrera: en qué rectas gastar la batería y dónde guardarla', mask: 'bat', sigma: 0.55, lr: 0.12, pairs: 6, maxG: 20, stall: 7 },
+  ];
+  const tracks = {};
+  function trackOf(job) {
+    const key = job.trackKey;
+    if (!tracks[key]) tracks[key] = SIM.buildTrack(job.trackDef || global.DATA.TRACKS[job.trackId]);
+    return tracks[key];
+  }
+  function run(r, max) { let s = 0; while (r.phase !== 'done' && s++ < max) r.step(1 / 30); return r; }
+  // una prueba: lo que tarda y lo que ha hecho mal (menos es mejor)
+  function evaluate(job) {
+    const T = trackOf(job), en = job.entry, id = en.driver.id, kn = { [id]: { th: job.th } };
+    if (job.stage === 'rapido') {
+      // vuelta lanzada, cronometrando cada tramo (de la frenada de una curva a la de la siguiente): así cada curva
+      // sabe qué le ha salido bien o mal a ella, y no a toda la vuelta junta (aprende mucho más deprisa)
+      const r = new SIM.Race(T, [en], { laps: 1, seed: job.seed, weather: 'seco', flying: true, noSC: true, kn });
+      const c = r.cars[0], bnd = bounds(T), nb = bnd.length, tb = new Array(nb).fill(null);
+      let s0 = c.sTot, t0 = r.t, tL = null, steps = 0;
+      while (r.phase !== 'done' && steps++ < 9000) {
+        r.step(1 / 30);
+        const s1 = c.sTot, t1 = r.t;
+        if (s0 < 0 && s1 >= 0) tL = t0 + (0 - s0) / Math.max(1e-6, s1 - s0) * (t1 - t0);
+        for (let j = 0; j < nb; j++) if (tb[j] === null && s0 < bnd[j] && s1 >= bnd[j]) tb[j] = t0 + (bnd[j] - s0) / Math.max(1e-6, s1 - s0) * (t1 - t0);
+        s0 = s1; t0 = t1;
+        if (c.finished || c.lapTimes.length) break;
+      }
+      const lap = c.lapTimes[0] || 999, offs = (c.offs || 0) + (c.mistakes || 0), lim = c.limits || 0, pen = 2.5 * offs + 0.8 * lim;
+      let seg = null;
+      if (tL !== null && tb.every((x) => x !== null)) { const tEnd = tL + lap; seg = tb.map((x, j) => (j + 1 < nb ? tb[j + 1] : tEnd + (tb[0] - tL)) - x); }
+      return { f: lap + pen, lap, offs, lim, seg, pen };
+    }
+    if (job.stage === 'limpio') {
+      // sale quinto de seis: tiene que adelantar y aguantar a los de detrás sin salirse ni tocarse
+      const rv = job.rivals || [], ents = [rv[0], rv[1], rv[2], rv[3], en, rv[4]].filter(Boolean);
+      const r = run(new SIM.Race(T, ents, { laps: 3, seed: job.seed, weather: 'seco', noSC: true, kn, grid: ents.map((_, i) => i) }), 40000);
+      const c = r.cars.find((x) => x.drv.id === id), time = c.finalTime || c.lapTimes.reduce((a, b) => a + b, 0) + (c.dnf ? 200 : 0);
+      const offs = (c.offs || 0) + (c.mistakes || 0), ct = c.contacts || 0;
+      return { f: time + 3 * offs + 4 * ct + 1 * (c.limits || 0) + 8 * (c.causedCrashes || 0) + (c.dnf ? 120 : 0), lap: c.best || 0, offs, ct, time };
+    }
+    // batería: tanda solo, salida parada, 3 vueltas; cuenta lo que tarda en las dos últimas
+    const r = run(new SIM.Race(T, [en], { laps: 3, seed: job.seed, weather: 'seco', noSC: true, kn }), 30000);
+    const c = r.cars[0], t2 = (c.lapTimes[1] || 120) + (c.lapTimes[2] || 120);
+    return { f: t2 + 2.5 * ((c.offs || 0) + (c.mistakes || 0)), lap: Math.min(c.lapTimes[1] || 999, c.lapTimes[2] || 999), time: t2 };
+  }
+  // dónde empieza el tramo de cada curva (metros desde la línea de meta)
+  const bcache = {};
+  function bounds(T) {
+    if (bcache[T.name + T.N]) return bcache[T.name + T.N];
+    const b = T.corners.map((cr) => ((cr.brake - Math.round(10 / T.ds) + T.N) % T.N) * T.ds);
+    return (bcache[T.name + T.N] = b);
+  }
+  // qué parámetros toca cada etapa
+  function maskIdx(T, mask) {
+    const nc = T.corners.length, out = [];
+    if (mask === 'corner') { for (let j = 0; j < nc; j++) for (let k = 0; k < 3; k++) out.push(j * SIM.KN_C + k); }
+    else if (mask === 'traffic') for (let j = 0; j < nc; j++) out.push(j * SIM.KN_C + 3);
+    else for (let i = 0; i < 2 * nc; i++) out.push(nc * SIM.KN_C + i);
+    return out;
+  }
+  // lo que sabe de un circuito quien nunca ha corrido en él
+  function rookieTh(T) { const nc = T.corners.length, n = SIM.knSize(T), th = new Array(n).fill(0); for (let i = 0; i < nc * SIM.KN_C; i++) th[i] = SIM.KN_ROOKIE[i % SIM.KN_C]; return th; }
+  // estrategia evolutiva (como la academia de redes): se prueban variaciones por parejas opuestas y se avanza hacia las que salen mejor
+  function gauss(rng) { return Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng()); }
+  function esPlan(st, idx, rng) { // perturbaciones de una generación
+    const eps = [];
+    for (let p = 0; p < st.pairs; p++) { const e = new Float64Array(idx.length); for (let i = 0; i < idx.length; i++) e[i] = gauss(rng); eps.push(e); }
+    return eps;
+  }
+  function esUpdate(S, st, idx, eps, fit) { // S: {th, m, v, t}; fit: [f+0, f-0, f+1, f-1, ...]
+    const n = fit.length, order = fit.map((f, i) => [f, i]).sort((a, b) => a[0] - b[0]), u = new Array(n);
+    order.forEach(([, i], r) => (u[i] = 0.5 - r / (n - 1))); // rango centrado: el mejor +0,5, el peor −0,5
+    S.t = (S.t || 0) + 1; const b1 = 0.9, b2 = 0.999;
+    for (let k = 0; k < idx.length; k++) {
+      let g = 0; for (let p = 0; p < eps.length; p++) g += (u[2 * p] - u[2 * p + 1]) * eps[p][k];
+      g /= eps.length * st.sigma;
+      const i = idx[k];
+      S.m[i] = b1 * (S.m[i] || 0) + (1 - b1) * g; S.v[i] = b2 * (S.v[i] || 0) + (1 - b2) * g * g;
+      S.th[i] += st.lr * (S.m[i] / (1 - b1 ** S.t)) / (Math.sqrt(S.v[i] / (1 - b2 ** S.t)) + 1e-8);
+      S.th[i] = Math.max(-2.5, Math.min(2.5, S.th[i]));
+    }
+  }
+  // como esUpdate, pero cada curva con su propia nota (su tramo y el anterior, donde frena)
+  function esUpdateSeg(S, st, idx, eps, res, KN_C) {
+    const n = res.length, nc = res[0].seg.length, b1 = 0.9, b2 = 0.999;
+    S.t = (S.t || 0) + 1;
+    const U = [];
+    for (let j = 0; j < nc; j++) {
+      const sc = res.map((r) => r.seg[(j - 1 + nc) % nc] + r.seg[j] + r.pen), order = sc.map((f, i) => [f, i]).sort((a, b) => a[0] - b[0]), u = new Array(n);
+      order.forEach(([, i], rk) => (u[i] = 0.5 - rk / (n - 1))); U.push(u);
+    }
+    for (let k = 0; k < idx.length; k++) {
+      const i = idx[k], j = Math.floor(i / KN_C), u = U[j];
+      let g = 0; for (let p = 0; p < eps.length; p++) g += (u[2 * p] - u[2 * p + 1]) * eps[p][k];
+      g /= eps.length * st.sigma;
+      S.m[i] = b1 * (S.m[i] || 0) + (1 - b1) * g; S.v[i] = b2 * (S.v[i] || 0) + (1 - b2) * g * g;
+      S.th[i] += st.lr * (S.m[i] / (1 - b1 ** S.t)) / (Math.sqrt(S.v[i] / (1 - b2 ** S.t)) + 1e-8);
+      S.th[i] = Math.max(-2.5, Math.min(2.5, S.th[i]));
+    }
+  }
+  const SCHOOL = { STAGES, evaluate, maskIdx, rookieTh, esPlan, esUpdate, esUpdateSeg };
+  if (typeof module !== 'undefined' && module.exports) module.exports = SCHOOL;
+  else global.SCHOOL = SCHOOL;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>// =====================================================================
@@ -7861,12 +8129,20 @@ function follow(id) {
 }
 function camStep(dt) {
   const c = S.cam;
-  if (c.mode === 'seguir' && S.race && S.sel !== null) {
+  // v1.19: la cámara va pegada al coche y solo se suaviza el «mirar hacia delante» y el cambio de piloto.
+  // Antes se suavizaba todo: a x4 el coche se movía 4 veces más rápido que la cámara y se le escapaba (iba hasta 60 m por detrás)
+  let locked = false;
+  if (c.mode === 'seguir' && S.race && S.sel !== null && S.race.cars[S.sel]) {
     const car = S.race.cars[S.sel];
     const p = carPose(car);
-    const lead = Math.min(40, 120 / c.z);
-    c.tx = p.x + Math.cos(p.a) * car.v * 0.25 * Math.min(1, lead / 10); c.ty = p.y + Math.sin(p.a) * car.v * 0.25 * Math.min(1, lead / 10);
-  }
+    const lead = Math.min(40, 120 / c.z), lk = car.v * 0.25 * Math.min(1, lead / 10);
+    const lx = Math.cos(p.a) * lk, ly = Math.sin(p.a) * lk;
+    if (c.lockId !== S.sel || c.offX === undefined || !isFinite(c.offX)) { c.lockId = S.sel; c.offX = c.x - p.x; c.offY = c.y - p.y; }
+    const kk = Math.min(1, dt * (Math.hypot(c.offX - lx, c.offY - ly) > 60 ? 3.5 : 2.2));
+    c.offX += (lx - c.offX) * kk; c.offY += (ly - c.offY) * kk;
+    c.tx = p.x + lx; c.ty = p.y + ly;
+    c.x = p.x + c.offX; c.y = p.y + c.offY; locked = true;
+  } else c.lockId = null;
   if (c.mode === 'sc') { // v1.12: siguiendo al coche de seguridad
     const sc = S.race && S.race.sc;
     if (!sc || sc.sTot === null || sc.sTot === undefined || !(S.race.sc && (S.race.sc.active !== false))) { if (!sc || sc.sTot === null || sc.sTot === undefined) follow(); }
@@ -7874,7 +8150,8 @@ function camStep(dt) {
   }
   if (c.mode !== 'libre') {
     const k = Math.min(1, dt * 5);
-    c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k; c.z += (c.tz - c.z) * Math.min(1, dt * 4);
+    if (!locked) { c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k; }
+    c.z += (c.tz - c.z) * Math.min(1, dt * 4);
   }
   if (c.trot !== undefined && c.rot !== c.trot) {
     const dr = c.trot - (c.rot || 0);
@@ -7996,6 +8273,7 @@ function boxLife(r, c, k) {
   return ` · ~${life} v${left > 0 ? (life >= left ? ' ✓ al final' : ` (faltan ${left - life})`) : ''}`;
 }
 // v1.18: segunda línea de cada piloto: última vuelta, dónde saldría si para ahora y si hay undercut
+const COMP_DRY = (c) => !!(SIM.COMPOUNDS[c.tyre] && SIM.COMPOUNDS[c.tyre].dry);
 function orInfo(r, c, ia) {
   if (c.pit || !r.pitPreview || r.phase !== 'racing') return '';
   const f = (x) => x.toFixed(1).replace('.', ',');
@@ -8003,10 +8281,12 @@ function orInfo(r, c, ia) {
   const pv = r.pitPreview(c), left = r.o.laps - c.lapsDone - 1;
   let txt = `⏱ ${last}${best && best !== last ? ` <span class="muted">(${best})</span>` : ''}`;
   if (left >= 1) {
-    txt += ` · 🅿 si paras: <b>P${pv.pos}</b>${pv.ahead ? ` · ${f(pv.ahead.gap)} s tras ${esc(pv.ahead.car.drv.short)}${pv.ahead.gap < 1.2 ? ' <span style="color:#ffcf70">(tráfico)</span>' : ''}` : ''}${pv.behind && pv.behind.gap < 2 ? ` · ${esc(pv.behind.car.drv.short)} a ${f(pv.behind.gap)} s` : ''}${r.sc || r.vsc ? ' <span style="color:#7be07b">(parada barata)</span>' : ''}`;
+    txt += ` · 🅿 si paras: <b>P${pv.pos}</b>${pv.ahead ? ` · ${f(pv.ahead.gap)} s tras ${esc(pv.ahead.car.drv.short)}${pv.ahead.gap < 1.2 ? ' <span style="color:#ffcf70">(tráfico)</span>' : ''}` : ''}${pv.behind && pv.behind.gap < 2 ? ` · ${esc(pv.behind.car.drv.short)} ${f(pv.behind.gap)} s detrás` : ''}${r.sc || r.vsc ? ' <span style="color:#7be07b">(parada barata)</span>' : ''}`;
     const A = r.order[ia - 1];
-    if (A && !A.dnf && !A.pit && c.ahead && c.ahead.car === A && c.ahead.gap < 45 && r.undercutGain) { const ug = r.undercutGain(c, A, c.ahead.gap); if (ug > 0) txt += ` · <b style="color:#7be07b">⚡ undercut a ${esc(A.drv.short)} (+${f(ug)} s)</b>`; }
-    if (c.chaserPitted && c.chaserPitted.lap >= c.lapsDone - 1 && r.cars[c.chaserPitted.id]) txt += ` · <b style="color:#ffcf70">${esc(r.cars[c.chaserPitted.id].drv.short)} ha parado: cúbrete o haz el overcut</b>`;
+    // v1.19: el undercut y el «cúbrete» solo tienen sentido si te toca parar pronto (con gomas recién puestas no)
+    const stopSoon = COMP_DRY(c) && (c.wear > 0.42 || (c.plan && c.plan.idx + 1 < c.plan.seq.length && c.plan.nextStop - (c.lapsDone + 1) <= 3));
+    if (stopSoon && A && !A.dnf && !A.pit && c.ahead && c.ahead.car === A && c.ahead.gap < 45 && r.undercutGain) { const ug = r.undercutGain(c, A, c.ahead.gap); if (ug > 0) txt += ` · <b style="color:#7be07b">⚡ undercut a ${esc(A.drv.short)} (+${f(ug)} s)</b>`; }
+    if (stopSoon && c.chaserPitted && c.chaserPitted.lap >= c.lapsDone - 1 && r.cars[c.chaserPitted.id]) txt += ` · <b style="color:#ffcf70">${esc(r.cars[c.chaserPitted.id].drv.short)} ha parado: cúbrete o haz el overcut</b>`;
   }
   return `<div class="or-info">${txt}</div>`;
 }
@@ -8017,9 +8297,17 @@ function renderOrders(force) {
   if (!force && performance.now() - (el._t || 0) < 450) return; // v1.18: la línea de información cambia a cada instante: como mucho ~2 veces por segundo
   el._t = performance.now();
   const h = ordBarHTML();
-  if (force || el.dataset.h !== h) { el.innerHTML = h; el.dataset.h = h; }
+  // v1.19: la línea de información cambia a cada momento; si el resto es igual, solo se reescribe esa línea
+  // (antes se rehacía la barra entera con sus desplegables y se medía su altura: tirones en el móvil)
+  const base = h.replace(/<div class="or-info">[\s\S]*?<\/div>/g, '<div class="or-info"></div>');
+  if (force || el._base !== base) { el.innerHTML = h; el._base = base; el._info = null; }
+  else {
+    const infos = h.match(/<div class="or-info">[\s\S]*?<\/div>/g) || [], nodes = el.querySelectorAll('.or-info');
+    infos.forEach((x, i) => { const v = x.slice(21, -6); if (nodes[i] && nodes[i]._v !== v) { nodes[i]._v = v; nodes[i].innerHTML = v; } });
+  }
   el.classList.toggle('on', !!h);
-  $('#view').style.setProperty('--ordH', (h ? el.getBoundingClientRect().height + 6 : 0) + 'px');
+  const oh = h ? Math.round(el.offsetHeight + 6) : 0;
+  if (el._oh !== oh) { el._oh = oh; $('#view').style.setProperty('--ordH', oh + 'px'); }
 }
 cv.addEventListener('pointerdown', (e) => {
   cv.setPointerCapture(e.pointerId);
@@ -9643,22 +9931,10 @@ function carEffects(c) {
   return out.join('<br>') + '<br>';
 }
 // v1.18: cuánto cuesta cada daño por vuelta en este circuito: vueltas de prueba de un coche solo (una vez por carrera y coche)
-function dmgSens(c) {
-  const r = S.race, key = r.T.name + '|' + c.team.id;
-  S.dmgSens = S.dmgSens || {};
-  if (S.dmgSens[key] !== undefined) return S.dmgSens[key];
-  S.dmgSens[key] = null;
-  setTimeout(() => {
-    try {
-      const lap = (part) => { const q = new SIM.Race(r.T, [{ driver: c.drv, team: c.team }], { laps: 2, seed: 5, weather: 'seco', noSC: true }); const x = q.cars[0]; if (part) x.dmg[part] = 0.5; let k = 0; while (q.phase !== 'done' && k++ < 20000) q.step(1 / 30); return x.lapTimes[1] || x.lapTimes[0]; };
-      const b = lap(null), out = {};
-      for (const k of ['fw', 'rw', 'su', 'sp']) out[k] = Math.max(0, (lap(k) - b) / 0.5);
-      S.dmgSens[key] = out;
-    } catch (e) { S.dmgSens[key] = {}; }
-  }, 30);
-  return null;
-}
-function dmgLoss(c) { const sn = dmgSens(c); if (!sn) return null; const d = c.dmg || {}; let t = 0; for (const k of ['fw', 'rw', 'su', 'sp']) t += (sn[k] || 0) * (d[k] || 0); return t; }
+// v1.19: lo que hace perder cada daño, medido una vez en el motor (fracción de la vuelta por unidad de daño). Antes se
+// simulaba al momento la primera vez que te tocaban: el juego se congelaba alrededor de un segundo
+const DMG_SENS = { fw: 0.084, rw: 0.027, su: 0.069, sp: 0.022 };
+function dmgLoss(c) { const r = S.race; if (!r) return null; const d = c.dmg || {}, lap = (r.T.refLap || 80) * 1.06; let t = 0; for (const k in DMG_SENS) t += DMG_SENS[k] * lap * (d[k] || 0); return t; }
 let cardFor = null, cardT = 0;
 const PART = { fw: 'alerón delantero', rw: 'alerón trasero', su: 'suspensión', sp: 'pontón' };
 function renderCard(force) {
@@ -10712,7 +10988,8 @@ function startQuali(phase) {
   const order = Array.from({ length: n }, (_, i) => i);
   for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
   S.wxNow = raceWx(S.seed);
-  S.race = new SIM.Race(S.T, ents, { quali: S.settings.qMode === 'ver2' ? 2 : 1, seed: S.seed + (S.qf ? S.qf.phase : 0), grid: order, weather: S.wxNow.weather, temp: S.wxNow.temp, wear: WEARMUL[S.settings.wear] || 1, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+  schoolPause('clasificación');
+  S.race = new SIM.Race(S.T, ents, { kn: knFor(ents, S.trackId, S.T), quali: S.settings.qMode === 'ver2' ? 2 : 1, seed: S.seed + (S.qf ? S.qf.phase : 0), grid: order, weather: S.wxNow.weather, temp: S.wxNow.temp, wear: WEARMUL[S.settings.wear] || 1, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
   resetView();
   flash(S.qf ? 'Q' + S.qf.phase : 'CLASIFICACIÓN', 1500);
 }
@@ -10732,7 +11009,7 @@ function qfSimRounds(from, pool, off) {
   const Q = S.qf, sz = qfSizes(S.entries.length);
   for (let p = from; p <= 3; p++) {
     const ents = pool.map((i) => S.entries[i]);
-    const q = SIM.qualify(S.T, ents, (S.seed + p * 7) >>> 0, { weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+    const q = SIM.qualify(S.T, ents, (S.seed + p * 7) >>> 0, { kn: knFor(ents, S.trackId, S.T), weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
     // la pista va mejorando de una ronda a otra (más o menos según el fin de semana; a veces el viento o el calor la empeoran)
     const er = SIM.makeRng((S.seed + 991 * p) >>> 0), evo = p === 1 ? 0 : (Q.evo = Q.evo || {})[p] ?? (Q.evo[p] = (Q.evo[p - 1] || 0) + (er() < 0.18 ? 0.05 + 0.25 * er() : -(0.06 + 0.3 * er())));
     Q.res[p] = q.map((x) => ({ idx: pool[x.idx], time: x.time < 900 ? x.time + (off || 0) + evo : null }));
@@ -10820,7 +11097,7 @@ function showQualiF1(r) {
     $('#qfSim').onclick = () => {
       // v1.15: las rondas simuladas se corrigen para casar con la que se ha corrido en pista (antes salían más lentas)
       const ents = Q.pool.map((i) => S.entries[i]);
-      const m = SIM.qualify(S.T, ents, (S.seed + ph * 7) >>> 0, { weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+      const m = SIM.qualify(S.T, ents, (S.seed + ph * 7) >>> 0, { kn: knFor(ents, S.trackId, S.T), weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
       const med = (a) => { a = a.filter((t) => t && t < 900).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : 0; };
       const a = med(rows.map((x) => x.time)), b = med(m.map((x) => x.time)), off = a && b ? a - b : 0;
       qfSimRounds(ph + 1, pass.map((x) => x.idx), off);
@@ -10920,7 +11197,7 @@ function startRace(ex, pre) {
     grid = Array.from({ length: n }, (_, i) => i);
     for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [grid[i], grid[j]] = [grid[j], grid[i]]; }
   } else {
-    S.quali = SIM.qualify(S.T, S.entries, S.seed, { weather: useWx ? wxR.weather : 'seco', temp: useWx ? wxR.temp : undefined, tyre: useWx && wxR.weather === 'lluvia' ? 'I' : 'S', equalCars: equalNow(ex), setups: ex ? null : setupsFor(S.entries, S.T, S.trackId, S.settings.laps) });
+    S.quali = SIM.qualify(S.T, S.entries, S.seed, { kn: knFor(S.entries, S.trackId, S.T), weather: useWx ? wxR.weather : 'seco', temp: useWx ? wxR.temp : undefined, tyre: useWx && wxR.weather === 'lluvia' ? 'I' : 'S', equalCars: equalNow(ex), setups: ex ? null : setupsFor(S.entries, S.T, S.trackId, S.settings.laps) });
     grid = S.quali.map((x) => x.idx);
     if (S.settings.grid === 'rev') grid.reverse();
   }
@@ -10967,6 +11244,8 @@ function startRace(ex, pre) {
     for (const tm of raceTeams()) { opts.strat[tm.id] = NEURAL.applyJefe(S.stratUsed.z[tm.id], tm.jefe); opts.jefes[tm.id] = NEURAL.jefeSim(tm.jefe); }
   }
   if (mgrTeam() && !eras) opts.mgrTeam = mgrTeam();
+  opts.kn = knFor(S.entries, S.trackId, S.T); // v1.19: lo que sabe cada uno de este circuito (escuela de pilotaje)
+  schoolPause('carrera');
   S.race = new SIM.Race(S.T, S.entries, opts);
   if (eras) S.entries = baseEntries;
   if (mgrTeam() && S.settings.manualPits) for (const c of S.race.cars) if (c.team.id === mgrTeam()) c.manualStrat = true;
@@ -11007,6 +11286,7 @@ function finishRace() {
   if (!(S.sprintNow && S.raceMode === 'temporada' && seasonOn())) rec.dotd = pickDotd(rec); // v1.11: piloto del día (no en la sprint)
   try { rec.muro = decReport(r, rec); } catch (e) { rec.muro = null; }
   rateDrivers(rec); // v1.13: nota de 1 a 10
+  try { knAfterRace(r, rec); } catch (e) { console.warn('escuela', e); }
   if (S.sprintNow && S.raceMode === 'temporada' && seasonOn()) {
     S.sprintNow = false;
     rec.sprint = true; rec.gp = S.champ.races.length;
@@ -12133,20 +12413,28 @@ function renderHud() {
   }
   updateView();
   renderOrders(); renderWeather();
-  $('#hOrd').style.display = mgrTeam() ? '' : 'none'; $('#hOrd').classList.toggle('on', !S.ordersHide);
-  $('#hPits').style.display = mgrTeam() ? '' : 'none'; $('#hPits').innerHTML = `<span>🅿</span>Paradas: ${S.settings.manualPits ? 'manuales' : 'automáticas'}`;
+  // v1.19: solo se toca el DOM si algo cambia (antes, 5 veces por segundo se reescribían botones y variables y se
+  // medía la pantalla varias veces: cada una obliga al navegador a recalcular la página → tirones en el móvil)
+  const setH = (sel, v, html) => { const e = $(sel); if (!e) return; const k = '_v'; if (e[k] !== v) { e[k] = v; if (html) e.innerHTML = v; else e.textContent = v; } };
+  const mg = !!mgrTeam();
+  { const e = $('#hOrd'); if (e._s !== mg + '|' + S.ordersHide) { e._s = mg + '|' + S.ordersHide; e.style.display = mg ? '' : 'none'; e.classList.toggle('on', !S.ordersHide); } }
+  { const e = $('#hPits'), v = mg + '|' + !!S.settings.manualPits; if (e._s !== v) { e._s = v; e.style.display = mg ? '' : 'none'; e.innerHTML = `<span>🅿</span>Paradas: ${S.settings.manualPits ? 'manuales' : 'automáticas'}`; } }
   { // lo que queda a la derecha de la torre: la franja de dirección de carrera, las repeticiones y los mensajes
-    const L = $('#hudList'), vr = $('#view').getBoundingClientRect(), lr = L.classList.contains('off') ? null : L.getBoundingClientRect();
-    const right = lr && lr.width ? Math.round(lr.right - vr.left + 6) : 8, V = $('#view');
-    V.style.setProperty('--rcL', right + 'px');
-    V.style.setProperty('--rpT', '50px');
-    const rpE = $('#replay'), rpOn = rpE && !rpE.classList.contains('hidden') && RP.open, rpR = rpOn ? rpE.getBoundingClientRect() : null;
-    V.style.setProperty('--rcT', (rpR && rpR.height ? Math.round(rpR.bottom - vr.top + 6) : 48) + 'px'); // v1.18: con la repetición abierta, el aviso va debajo
-    V.style.setProperty('--msgL', (lr && lr.bottom > vr.bottom - 160 ? right : 8) + 'px');
+    const L = $('#hudList'), rpE = $('#replay'), rpOn = !!(rpE && !rpE.classList.contains('hidden') && RP.open);
+    const now = performance.now(), key = renderHud.last + '|' + rpOn + '|' + L.className + '|' + innerWidth + 'x' + innerHeight;
+    if (renderHud.lay !== key || now - (renderHud.layT || 0) > 1500) {
+      renderHud.lay = key; renderHud.layT = now;
+      const vr = $('#view').getBoundingClientRect(), lr = L.classList.contains('off') ? null : L.getBoundingClientRect();
+      const right = lr && lr.width ? Math.round(lr.right - vr.left + 6) : 8, V = $('#view');
+      const rpR = rpOn ? rpE.getBoundingClientRect() : null;
+      const vars = { '--rcL': right + 'px', '--rpT': '50px', '--rcT': (rpR && rpR.height ? Math.round(rpR.bottom - vr.top + 6) : 48) + 'px', '--msgL': (lr && lr.bottom > vr.bottom - 160 ? right : 8) + 'px' };
+      V._vars = V._vars || {};
+      for (const k in vars) if (V._vars[k] !== vars[k]) { V._vars[k] = vars[k]; V.style.setProperty(k, vars[k]); }
+    }
   }
-  $('#hPause').textContent = S.paused ? '▶' : '❚❚';
-  $('#hSpeed').textContent = S.hlOn ? 'R·x' + (S.hlNow || 4) : 'x' + S.speed;
-  if ($('#hHl')) $('#hHl').innerHTML = `<span>🎞</span>Modo resumen: ${S.hlOn ? 'sí' : 'no'}`;
+  setH('#hPause', S.paused ? '▶' : '❚❚');
+  setH('#hSpeed', S.hlOn ? 'R·x' + (S.hlNow || 4) : 'x' + S.speed);
+  setH('#hHl', `<span>🎞</span>Modo resumen: ${S.hlOn ? 'sí' : 'no'}`, true);
   $('#hCam').classList.toggle('on', S.cam.mode === 'seguir');
   $('#hNames').classList.toggle('on', S.showNames);
   if (typeof updateSndButtons === 'function') updateSndButtons();
@@ -12155,6 +12443,18 @@ function renderHud() {
 
 // ---------------- Novedades ----------------
 const CHANGELOG = [
+  { v: '1.19', items: [
+    '🏫 Escuela de pilotaje (inicio y menú): cada piloto aprende cada circuito por etapas. 1) Rápido: solo en pista, trazada, frenadas y paso por curva; un novato empieza con miedo y por el centro y en unos minutos baja de la trazada de manual. 2) Limpio: con cinco rivales, en qué curvas puede apurar con coches cerca. 3) Batería: en qué rectas gastarla',
+    '🏫 Lo aprendido se usa en clasificación (a tope) y en carrera (con algo de margen); cuánto se aprovecha lo deciden sus stats (curvas rápidas, lentas, frenada, consistencia, energía). Los rivales aprenden un poco viendo al que mejor conoce cada circuito',
+    '💥 Muchos menos toques (de unos 24 a unos 7 por carrera de 11 vueltas): ya no se cierran de lado encima del otro al trazar ni al volver a la trazada tras adelantar',
+    '🚨 Con safety car y VSC ya no se adelanta (antes el que bajaba de 43 km/h en la fila contaba como «tocado» y le pasaban). El safety car dura según lo que haya que limpiar, sale antes a buscar al líder y por cosas menores (o si acaba de haber uno) sale el virtual',
+    '🎧 El undercut y el «cúbrete» solo se proponen si te toca parar pronto (no con gomas recién puestas)',
+    '🎥 La cámara va pegada al coche que sigues: a x4 ya no se le escapa',
+    '⚡ Menos tirones: el juego ya no se congela al recibir daños, la barra de órdenes solo reescribe lo que cambia y en pantalla completa no se repintan paneles ocultos',
+    '🔧 Reparar según lo que cuesta de verdad: compara lo que pierdes por vuelta con lo que cuesta parar',
+    '❗ La exclamación de sanción va a la derecha del nombre (ya no descuadra la torre)',
+    '💶 Patrocinios pequeños en miles de euros (antes salía «0 M€ por punto»)',
+  ] },
   { v: '1.18', items: [
     '🎧 Barra de tus pilotos: última vuelta (y la mejor), «si paras ahora: P8, 1,2 s tras GAS» (con aviso de tráfico y de parada barata con safety car), undercut posible al de delante con lo que ganarías, y aviso cuando el de detrás para (cúbrete o haz el overcut)',
     '🛞 En el desplegable de Box, lo que dura cada goma en este circuito y con tu coche, y si llega al final («Medio · ~6 v ✓ al final» o «faltan 3»)',
@@ -12728,6 +13028,7 @@ function showHome() {
     ['eras', '⏳', 'Duelo de eras', 'Leyendas contra los de hoy'],
     ['champ', '📊', 'Campeonato', 'Clasificación y calendario'],
     ['acad', '🧠', 'Academia', net ? esc(net.name) + (S.trainer.ready ? ' · G' + S.trainer.gen : '') : 'Entrena las redes', net && net.exams && net.exams.length && net.exams[net.exams.length - 1].nota !== undefined ? 'nota ' + net.exams[net.exams.length - 1].nota : ''],
+    ['school', '🏫', 'Escuela de pilotaje', schoolTileTxt()],
     ['teams', '🏎', 'Escuderías', `${DATA.TEAMS.length} equipos · ${DATA.DRIVERS.length} pilotos`],
     ['fama', '🏛', 'Salón de la fama', 'Récords y campeones'],
     ['edit', '✏', 'Editor', 'Dibuja tus circuitos'],
@@ -12749,6 +13050,7 @@ function showHome() {
     else if (k === 'champ') showChamp('pilotos', true);
     else if (k === 'fama') showChamp('fama', true);
     else if (k === 'acad') openAcademy();
+    else if (k === 'school') showSchool();
     else if (k === 'teams') showTeamsEditor();
     else if (k === 'edit') openEditor();
     else if (k === 'eras') showEras();
@@ -13133,7 +13435,7 @@ function showErasResults(r, res) {
 }
 
 window.__legDbg = { legAfterRace, legSeasonEnd, carRank, legProgress }; // para las pruebas
-window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice() }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
+window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice(), showSchool: () => showSchool(), sch: () => SCH }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
 
 // ---- salón de la fama: las leyendas con sus récords reales, más lo que hagan en el juego ----
 function famaLegends(F) {
@@ -13302,6 +13604,7 @@ function showMenu() {
     ['eras', '⏳', 'Duelo de eras', 'Leyendas de la F1 contra los pilotos de hoy, con el mismo coche'],
     ['leg', '⭐', 'Leyendas', 'Quién hay y cómo se desbloquea cada una para la temporada'],
     ss && ss.manager ? ['office', '🏢', 'Oficina del mánager', 'Mejorar el coche, fichar pilotos y estrategas'] : null,
+    ['school', '🏫', 'Escuela de pilotaje', 'Que aprendan cada circuito: rápidos, limpios y con la batería'],
     ['acad', '🧠', 'Academia', 'Entrenar y comparar las redes, estrategas'],
     ['teams', '🎨', 'Escuderías y pilotos', 'Nombres, colores, stats, rasgos y estrategas'],
     ['edit', '✏', 'Editor de circuitos', 'Dibuja tus propios circuitos'],
@@ -13321,6 +13624,7 @@ function showMenu() {
     else if (k === 'fama') showChamp('fama');
     else if (k === 'office') showOffice();
     else if (k === 'acad') { closeModal(); openAcademy(); }
+    else if (k === 'school') showSchool();
     else if (k === 'teams') showTeamsEditor();
     else if (k === 'edit') { closeModal(); openEditor(); }
     else if (k === 'full') { closeModal(); enterFocus(); }
@@ -13495,7 +13799,8 @@ function frame(now) {
   sndStep(rdt);
   uiT -= rdt;
   if (uiT <= 0) {
-    uiT = 0.2; renderHeader(); renderSide(); renderHud(); processEvents();
+    // v1.19: en pantalla completa la cabecera y la tabla lateral están ocultas: no se repintan (se ponen al día al salir)
+    uiT = 0.2; const fz = document.body.classList.contains('focus'); if (!fz || (S.uiN = (S.uiN || 0) + 1) % 10 === 0) { renderHeader(); renderSide(); } renderHud(); processEvents();
     if (S.settings.perfBox) perfBox();
     acT -= 0.12;
     if (acOpen() && acT <= 0) { acT = 0.6; renderAcademy(); }
@@ -13580,6 +13885,249 @@ function onWorker(e) {
     updateTrainPill();
     if (acOpen()) renderAcademy();
   } else if (m.type === 'prog' && m.prog.gen === tr.gen) Object.assign(tr, { ci: m.prog.ci, ki: m.prog.ki, racesRun: m.prog.racesRun, trainSecs: m.prog.trainSecs });
+}
+// =====================================================================
+//  v1.19: ESCUELA DE PILOTAJE: pantalla, hilos de entrenamiento y lo que aprenden en carrera
+//  (el motor está en sim.js —buildKn— y las pruebas en school.js)
+// =====================================================================
+const SCH = { pool: [], q: [], run: null, noWk: false, cb: {}, jid: 0 };
+const knTrackCache = {};
+function knT(tid) {
+  if (S.T && S.trackId === tid) return S.T;
+  if (!knTrackCache[tid]) { const def = trackDef(tid); try { knTrackCache[tid] = def ? SIM.buildTrack(def) : null; } catch (e) { knTrackCache[tid] = null; } }
+  return knTrackCache[tid];
+}
+const knRound = (a) => Array.from(a, (x) => Math.round(x * 100) / 100);
+// ¿conoce ya el circuito? (los de la parrilla real conocen los circuitos reales; los demás, cuando han corrido en él)
+function knVet(d, tid) { const def = trackDef(tid); return ((d.exp || {})[tid] || 0) >= 2 || !!(def && def.real && /^f1_/.test(d.id)) || (!/^g/.test(d.id) && (d.age || 25) >= 24); }
+// lo que se usa en carrera: lo aprendido (si un veterano está reaprendiendo desde cero y aún va peor que la trazada de manual, lo de siempre)
+function knFor(entries, tid, T) {
+  if (!tid || !T || !entries) return null;
+  const out = {}, n = SIM.knSize(T); let any = false;
+  for (const en of entries) {
+    const d = en.driver, k = d && d.kn && d.kn[tid];
+    if (!k || !k.th || k.th.length !== n || k.hold) continue;
+    if (k.lapB && k.lapM && k.lapB > k.lapM + 0.02) continue; // aún aprendiendo (va peor que con la de manual): en carrera, lo de siempre
+    out[d.id] = { th: k.th }; any = true;
+  }
+  return any ? out : null;
+}
+function knAllDrivers() { const a = DATA.DRIVERS.slice(); try { if (S.champ && S.champ.season) a.push(...acad()); } catch (e) { /* sin temporada */ } return a; }
+// después de cada carrera: experiencia en el circuito y aprender viendo al que mejor lo conoce
+function knAfterRace(r, rec) {
+  const tid = S.trackId, T = S.T; if (!tid || !T || !rec || !rec.resultados) return;
+  const n = SIM.knSize(T), byId = {}; for (const d of knAllDrivers()) byId[d.id] = d;
+  const ran = rec.resultados.map((x) => byId[x.driver]).filter(Boolean);
+  const gain = (d) => { const k = d.kn && d.kn[tid]; return k && k.th && k.th.length === n && !k.hold && k.lapM && k.lapB ? k.lapM - k.lapB : 0; };
+  const teacher = ran.filter((d) => gain(d) > 0.03).sort((a, b) => gain(b) - gain(a))[0];
+  let changed = false;
+  for (const d of ran) {
+    d.exp = d.exp || {}; d.exp[tid] = (d.exp[tid] || 0) + 1; changed = true;
+    const k = d.kn && d.kn[tid];
+    if (!teacher || teacher === d || (k && k.school)) continue;
+    // aprender viendo: un poco de lo que hace el que mejor conoce el circuito (más los jóvenes; más deprisa en «Muy difícil»)
+    const a = (d.age < 25 ? 0.1 : d.age < 31 ? 0.07 : 0.04) * (difK('ai') || 1), bt = teacher.kn[tid].th;
+    const th0 = k && k.th && k.th.length === n ? k.th : new Array(n).fill(0);
+    d.kn = d.kn || {};
+    d.kn[tid] = Object.assign(k || { st: 0, g: 0 }, { th: knRound(th0.map((x, i) => x + a * (bt[i] - x))), watched: ((k && k.watched) || 0) + 1, from: teacher.id });
+  }
+  if (changed) saveRoster();
+}
+// ---- hilos ----
+function schoolPool() {
+  if (SCH.pool.length || SCH.noWk) return SCH.pool;
+  try {
+    const src = ['srcSim', 'srcData', 'srcSchool'].map((id) => document.getElementById(id).textContent).join('\n;\n')
+      + '\n;self.onmessage=(e)=>{const j=e.data;let r;try{r=SCHOOL.evaluate(j);}catch(err){r={f:1e9,lap:0,err:String(err)};}self.postMessage({id:j.id,r});};';
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const want = S.settings.schoolCores || 0, hc = navigator.hardwareConcurrency || 4;
+    const n = Math.max(1, Math.min(6, want || hc - 1));
+    for (let i = 0; i < n; i++) { const w = new Worker(url); w.onmessage = schoolMsg; w.onerror = (e) => { console.warn('escuela', e.message || e); w.busy = false; }; w.busy = false; SCH.pool.push(w); }
+  } catch (e) { SCH.noWk = true; }
+  return SCH.pool;
+}
+function schoolKill() { for (const w of SCH.pool) try { w.terminate(); } catch (e) { /* nada */ } SCH.pool = []; for (const id in SCH.cb) { SCH.cb[id]({ f: 1e9, lap: 0 }); delete SCH.cb[id]; } SCH.q = []; }
+function schoolJob(job) { return new Promise((res) => { job.id = ++SCH.jid; SCH.cb[job.id] = res; SCH.q.push(job); schoolPump(); }); }
+function schoolPump() {
+  const pool = schoolPool();
+  if (!pool.length) { // sin hilos: en el principal, de una en una
+    if (!SCH.mainBusy && SCH.q.length) { SCH.mainBusy = true; setTimeout(() => { const j = SCH.q.shift(); let r; try { r = SCHOOL.evaluate(j); } catch (e) { r = { f: 1e9, lap: 0 }; } SCH.mainBusy = false; const cb = SCH.cb[j.id]; delete SCH.cb[j.id]; if (cb) cb(r); schoolPump(); }, 0); }
+    return;
+  }
+  for (const w of pool) { if (w.busy || !SCH.q.length) continue; const j = SCH.q.shift(); w.busy = true; w.postMessage(j); }
+}
+function schoolMsg(e) { const w = e.target; w.busy = false; const cb = SCH.cb[e.data.id]; delete SCH.cb[e.data.id]; if (cb) cb(e.data.r); schoolPump(); }
+// ---- entrenamiento ----
+const schTeamOf = (d) => teamById(d.team) || (mgrTeam() && teamById(mgrTeam())) || DATA.TEAMS[0];
+const schClone = (d) => { const c = JSON.parse(JSON.stringify(d)); delete c.kn; delete c.exp; return c; };
+function schJob(R, stage, th, seed) { return { trackKey: R.tid, trackDef: trackDef(R.tid), entry: R.entry, rivals: R.rivals, th: Array.from(th), stage, seed }; }
+async function schVal(R, stage, th) {
+  const seeds = stage === 'limpio' ? [101, 202, 303, 404] : [101, 202];
+  const rs = await Promise.all(seeds.map((sd) => schoolJob(schJob(R, stage, th, sd))));
+  const k = rs.length, sum = (f) => rs.reduce((a, r) => a + (f(r) || 0), 0);
+  return { f: sum((r) => r.f) / k, lap: sum((r) => r.lap) / k, offs: sum((r) => r.offs), ct: sum((r) => r.ct), time: sum((r) => r.time) / k, n: k };
+}
+function schRec(d, tid, T) {
+  d.kn = d.kn || {};
+  const n = SIM.knSize(T);
+  let k = d.kn[tid];
+  if (!k || !k.th || k.th.length !== n) { const vet = knVet(d, tid); k = d.kn[tid] = { th: vet ? new Array(n).fill(0) : knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet, hist: [] }; }
+  return k;
+}
+async function schoolStart(d, tid, stage) {
+  schoolStop(true);
+  const T = knT(tid); if (!T || !d) return;
+  const k = schRec(d, tid, T); k.school = true;
+  const tm = schTeamOf(d), entry = { driver: schClone(d), team: JSON.parse(JSON.stringify(tm)) };
+  const ov = DATA.overall(d.stats);
+  const rivals = DATA.DRIVERS.filter((x) => x.id !== d.id).sort((a, b) => Math.abs(DATA.overall(a.stats) - ov) - Math.abs(DATA.overall(b.stats) - ov)).slice(0, 5).map((x) => ({ driver: schClone(x), team: JSON.parse(JSON.stringify(tm)) }));
+  let seed = 1; const rng = () => ((seed = (seed * 1103515245 + 12345 + (Date.now() & 7)) & 0x7fffffff) / 0x7fffffff);
+  const R = { d, tid, T, k, entry, rivals, on: true, stage: stage ?? Math.min(2, k.st || 0), seedN: 1000 + (k.g || 0) * 40, rng, sg: 0, stall: 0, t0: performance.now() };
+  SCH.run = R; R.msg = 'Preparando…'; renderSchool();
+  // referencias: la trazada de manual y por dónde empieza
+  if (!k.lapM) { const m = await schVal(R, 'rapido', new Array(SIM.knSize(T)).fill(0)); if (SCH.run !== R) return; k.lapM = +m.lap.toFixed(3); }
+  if (!k.lap0) { const z = await schVal(R, 'rapido', k.th); if (SCH.run !== R) return; k.lap0 = +z.lap.toFixed(3); k.lapB = k.lapB || k.lap0; if (k.vet === false || k.lapB > k.lapM + 0.05) k.hold = !!k.vet; }
+  schoolLoop(R);
+}
+function schoolStop(silent) {
+  const R = SCH.run; if (!R) return;
+  R.on = false; SCH.run = null; SCH.q = [];
+  if (R.k) R.k.school = false;
+  knSave(R);
+  if (!silent && schoolOpen()) renderSchool();
+}
+function schoolPause(why) { if (SCH.run) { schoolStop(true); flash('ESCUELA EN PAUSA: ' + String(why).toUpperCase(), 1400); } }
+function knSave(R) { try { saveRoster(); if (R && acad().includes(R.d)) saveAll(); } catch (e) { saveRoster(); } }
+async function schoolLoop(R) {
+  const startStage = async () => { R.S = { th: R.k.th.slice(), m: {}, v: {}, t: 0 }; R.sg = 0; R.stall = 0; R.best = await schVal(R, SCHOOL.STAGES[R.stage].id, R.S.th); R.bestTh = R.S.th.slice(); };
+  await startStage(); if (SCH.run !== R) return;
+  while (SCH.run === R && R.on) {
+    const st = SCHOOL.STAGES[R.stage], idx = SCHOOL.maskIdx(R.T, st.mask), eps = SCHOOL.esPlan(st, idx, R.rng);
+    R.msg = `Etapa ${R.stage + 1} · probando ${eps.length * 2} variaciones${SCH.pool.length ? ` en ${SCH.pool.length} hilo${SCH.pool.length > 1 ? 's' : ''}` : ''}`;
+    if (schoolOpen()) renderSchool(true);
+    const jobs = [];
+    for (let p = 0; p < eps.length; p++) { const sd = R.seedN++; for (const sg of [1, -1]) { const th = R.S.th.slice(); idx.forEach((i, k) => (th[i] += sg * st.sigma * eps[p][k])); jobs.push(schoolJob(schJob(R, st.id, th, sd))); } }
+    const res = await Promise.all(jobs);
+    if (SCH.run !== R) return;
+    if (st.id === 'rapido' && res.every((x) => x && x.seg && x.seg.length === R.T.corners.length)) SCHOOL.esUpdateSeg(R.S, st, idx, eps, res, SIM.KN_C);
+    else SCHOOL.esUpdate(R.S, st, idx, eps, res.map((x) => x.f));
+    const v = await schVal(R, st.id, R.S.th);
+    if (SCH.run !== R) return;
+    R.sg++; const k = R.k; k.g = (k.g || 0) + 1;
+    (k.hist = k.hist || []).push([k.g, R.stage, +v.f.toFixed(2), +v.lap.toFixed(3), v.offs || 0, v.ct || 0]);
+    if (k.hist.length > 90) k.hist.splice(0, k.hist.length - 90);
+    const margin = st.id === 'limpio' ? 0.4 : 0.015;
+    if (v.f < R.best.f - margin) {
+      R.best = v; R.bestTh = R.S.th.slice(); R.stall = 0;
+      k.th = knRound(R.bestTh);
+      if (st.id === 'rapido') { k.lapB = +v.lap.toFixed(3); if (k.hold && k.lapB <= k.lapM + 0.02) k.hold = false; }
+      if (st.id === 'limpio') k.inc = +((v.offs + v.ct) / v.n).toFixed(2);
+      if (st.id === 'bateria') k.tanda = +v.time.toFixed(2);
+    } else R.stall++;
+    if (st.id === 'limpio' && k.inc0 === undefined) k.inc0 = +(((R.best.offs || 0) + (R.best.ct || 0)) / (R.best.n || 1)).toFixed(2);
+    if (st.id === 'bateria' && k.tanda0 === undefined) k.tanda0 = +R.best.time.toFixed(2);
+    if (k.g % 3 === 0) knSave(R);
+    if (R.stall >= st.stall || R.sg >= st.maxG) {
+      k.st = Math.max(k.st || 0, R.stage + 1); knSave(R);
+      if (R.stage < 2) { R.stage++; flash(`${SCHOOL.STAGES[R.stage - 1].ic} ETAPA ${R.stage} TERMINADA · AHORA: ${SCHOOL.STAGES[R.stage].name.toUpperCase()}`, 1800); await startStage(); if (SCH.run !== R) return; }
+      else { R.on = false; SCH.run = null; k.school = false; flash('🏫 ESCUELA TERMINADA EN ESTE CIRCUITO', 1800); if (schoolOpen()) renderSchool(); return; }
+    }
+    if (schoolOpen()) renderSchool();
+  }
+}
+// ---- pantalla ----
+const schoolOpen = () => !$('#modal').classList.contains('hidden') && !!$('#mbox #scBox');
+function schoolTileTxt() { const R = SCH.run; return R ? `${esc(R.d.short || R.d.name)} · etapa ${R.stage + 1}` : 'Rápidos, limpios y con la batería'; }
+function schDriverList() {
+  const M = mgrTeam(), me = S.raceMode === 'temporada' && meDrv ? meDrv() : null;
+  let list = M ? DATA.DRIVERS.filter((d) => d.team === M) : me ? [me] : DATA.DRIVERS.slice();
+  try { if (M && S.champ.season) list = list.concat(acad()); } catch (e) { /* sin cantera */ }
+  return list.filter(Boolean);
+}
+function schTrackList() {
+  let ids = [];
+  try { const ss = S.champ && S.champ.season; if (ss && ss.calendar) ids = ss.calendar.map((x) => (typeof x === 'string' ? x : x.id || x.track)).filter(Boolean); } catch (e) { /* nada */ }
+  if (!ids.length) ids = Object.keys(DATA.TRACKS);
+  let next = null; try { if (seasonOn()) next = seasonTrack(); } catch (e) { /* sin temporada */ }
+  ids = [...new Set([next || S.trackId, ...ids].filter((id) => id && trackDef(id)))]; // primero, el de la próxima carrera
+  return ids;
+}
+const fmtS = (x) => (x >= 60 ? Math.floor(x / 60) + ':' + (x % 60).toFixed(2).padStart(5, '0') : x.toFixed(2)).replace('.', ',');
+const dS = (x) => (x > 0 ? '+' : x < 0 ? '−' : '±') + Math.abs(x).toFixed(2).replace('.', ',') + ' s';
+function schMapSVG(T, th, apt) {
+  const kn = th ? SIM.buildKn(T, th, apt) : null, N = T.N, step = Math.max(1, Math.round(N / 400));
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < N; i += step) { x0 = Math.min(x0, T.cx[i]); x1 = Math.max(x1, T.cx[i]); y0 = Math.min(y0, T.cy[i]); y1 = Math.max(y1, T.cy[i]); }
+  const pad = 30, W = x1 - x0 + 2 * pad, H = y1 - y0 + 2 * pad;
+  const pts = (d) => { let o = ''; for (let i = 0; i <= N; i += step) { const q = i % N, dd = d ? d[q] : 0; o += `${(T.cx[q] + T.nx[q] * dd - x0 + pad).toFixed(1)},${(T.cy[q] + T.ny[q] * dd - y0 + pad).toFixed(1)} `; } return o; };
+  return `<svg class="sc-map" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" preserveAspectRatio="xMidYMid meet" aria-label="Trazada aprendida sobre el circuito">
+    <polyline points="${pts(null)}" fill="none" stroke="#2b313b" stroke-width="${Math.max(T.hw * 2, Math.max(W, H) / 45).toFixed(1)}" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="${pts(T.dRL)}" fill="none" stroke="#8f98a8" stroke-width="${(Math.max(W, H) / 260).toFixed(1)}" stroke-dasharray="${(Math.max(W, H) / 90).toFixed(1)} ${(Math.max(W, H) / 130).toFixed(1)}"/>
+    ${kn ? `<polyline points="${pts(kn.d)}" fill="none" stroke="#ff2e88" stroke-width="${(Math.max(W, H) / 170).toFixed(1)}" stroke-linejoin="round"/>` : ''}</svg>`;
+}
+function schChartSVG(k, stage) {
+  const h = (k.hist || []).filter((x) => x[1] === stage); if (h.length < 2) return '<div class="muted sc-empty">La gráfica aparece al terminar las primeras generaciones.</div>';
+  const val = (x) => (stage === 0 ? x[3] : stage === 1 ? x[4] + x[5] : x[2]);
+  const ys = h.map(val), ref = stage === 0 && k.lapM ? k.lapM : null;
+  let lo = Math.min(...ys, ref ?? 1e9), hi = Math.max(...ys, ref ?? -1e9); if (hi - lo < 0.2) { hi += 0.1; lo -= 0.1; }
+  const W = 320, Hh = 110, X = (i) => 8 + (i / (h.length - 1)) * (W - 16), Y = (y) => 8 + (1 - (y - lo) / (hi - lo)) * (Hh - 16);
+  const pts = h.map((x, i) => `${X(i).toFixed(1)},${Y(val(x)).toFixed(1)}`).join(' ');
+  return `<svg class="sc-chart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" aria-label="Evolución por generación">
+    ${ref ? `<line x1="0" x2="${W}" y1="${Y(ref).toFixed(1)}" y2="${Y(ref).toFixed(1)}" stroke="#8f98a8" stroke-dasharray="4 4"/><text x="${W - 4}" y="${(Y(ref) - 4).toFixed(1)}" text-anchor="end" class="sc-ax">manual ${fmtS(ref)}</text>` : ''}
+    <polyline points="${pts}" fill="none" stroke="#ff2e88" stroke-width="2.2" stroke-linejoin="round"/>
+    <text x="${W - 4}" y="12" text-anchor="end" class="sc-ax">${stage === 0 ? fmtS(hi) : stage === 1 ? hi.toFixed(0) + ' incid.' : fmtS(hi)}</text><text x="${W - 4}" y="${Hh - 4}" text-anchor="end" class="sc-ax">${stage === 0 ? fmtS(lo) : stage === 1 ? lo.toFixed(0) + ' incid.' : fmtS(lo)}</text><text x="4" y="12" class="sc-ax">${['vuelta lanzada', 'salidas y toques', 'dos vueltas de carrera'][stage]}</text></svg>`;
+}
+function showSchool() {
+  S.schDrv = S.schDrv && schDriverList().some((d) => d.id === S.schDrv) ? S.schDrv : (SCH.run ? SCH.run.d.id : (schDriverList()[0] || {}).id);
+  S.schTrk = S.schTrk && trackDef(S.schTrk) ? S.schTrk : SCH.run ? SCH.run.tid : schTrackList()[0];
+  modal('<div id="scBox"></div>'); $('#mbox').classList.add('pw-screen');
+  renderSchool();
+}
+function renderSchool(light) {
+  const box = $('#mbox #scBox'); if (!box) return;
+  const drivers = schDriverList(), d = drivers.find((x) => x.id === S.schDrv) || drivers[0];
+  const tid = S.schTrk, T = knT(tid), R = SCH.run, mine = R && d && R.d === d && R.tid === tid;
+  if (light && box._ok) { const st = $('#scStatus'); if (st && R) st.textContent = R.msg || ''; return; }
+  box._ok = true;
+  if (!d || !T) { box.innerHTML = '<div class="pw-top"><button class="back" id="scBack">‹</button><h1>Escuela de pilotaje</h1></div><div class="pw-body"><div class="note">No hay pilotos o circuitos para entrenar.</div></div>'; $('#scBack').onclick = () => closeModal(); return; }
+  const n = SIM.knSize(T), kOld = d.kn && d.kn[tid], k = kOld && kOld.th && kOld.th.length === n ? kOld : null, vet = knVet(d, tid);
+  const apt = SIM.knApt(d.stats), pc = (x) => Math.round(x * 100) + ' %';
+  const done = k ? k.st || 0 : 0, cur = mine ? R.stage : Math.min(2, done), chartSt = mine ? R.stage : 0;
+  const stages = SCHOOL.STAGES.map((st, i) => `<button class="sc-st ${i < done ? 'ok' : ''} ${i === cur ? 'cur' : ''}" data-scst="${i}" ${i > done ? 'disabled' : ''}><span class="n">${i + 1}</span><b>${st.ic} ${st.name}</b><small>${st.what}</small>${i < done ? '<em>✓ hecha</em>' : i === cur && mine ? '<em>entrenando…</em>' : ''}</button>`).join('');
+  let nums = '';
+  if (k && k.lapM) {
+    const lb = k.lapB || k.lap0 || k.lapM;
+    nums = `<div class="sc-nums"><div><b>${fmtS(lb)}</b><span>vuelta lanzada${k.lap0 && Math.abs(k.lap0 - lb) > 0.01 ? ` (empezó en ${fmtS(k.lap0)})` : ''}</span></div><div><b class="${lb < k.lapM - 0.005 ? 'up' : lb > k.lapM + 0.005 ? 'dn' : ''}">${dS(lb - k.lapM)}</b><span>frente a la trazada de manual (${fmtS(k.lapM)})</span></div>${k.inc !== undefined ? `<div><b>${String(k.inc).replace('.', ',')}</b><span>salidas y toques por carrera con tráfico${k.inc0 !== undefined ? ` (antes ${String(k.inc0).replace('.', ',')})` : ''}</span></div>` : ''}${k.tanda !== undefined ? `<div><b>${dS(k.tanda - (k.tanda0 ?? k.tanda))}</b><span>en dos vueltas de carrera gastando la batería donde ha aprendido</span></div>` : ''}</div>`;
+  }
+  const status = mine ? `<div class="sc-status"><i class="dot live"></i><span id="scStatus">${esc(R.msg || '')}</span></div>` : R ? `<div class="note">Entrenando a ${esc(R.d.name)} en ${esc(trackDef(R.tid).name)}. Solo se entrena a uno a la vez.</div>` : '';
+  const known = Object.entries(d.kn || {}).filter(([t, x]) => trackDef(t) && x && x.th).map(([t, x]) => `<tr><td>${esc(trackDef(t).name)}</td><td>${'✓'.repeat(x.st || 0) || (x.watched ? '👀' : '—')}</td><td>${x.lapM && x.lapB ? dS(x.lapB - x.lapM) : x.watched ? 'visto en carrera' : ''}</td></tr>`).join('');
+  box.innerHTML = `<div class="pw-top"><button class="back" id="scBack" title="Volver">‹</button><h1>Escuela de pilotaje</h1></div>
+    <div class="pw-body sc">
+      <div class="note">Cada piloto aprende cada circuito por etapas: primero a ir rápido solo en pista, luego a ir limpio con coches cerca y, por último, a gastar bien la batería. Lo que aprende lo usa en clasificación y en carrera; cuánto aprovecha lo deciden sus stats. Los rivales también aprenden un poco viendo al que mejor conoce cada circuito.</div>
+      <div class="sc-pick"><select class="sel" id="scDrv">${drivers.map((x) => `<option value="${x.id}" ${x === d ? 'selected' : ''}>${esc(x.name)}${x.team ? '' : ' (cantera)'}</option>`).join('')}</select>
+        <select class="sel" id="scTrk">${schTrackList().map((t) => `<option value="${t}" ${t === tid ? 'selected' : ''}>${esc(trackDef(t).name)}</option>`).join('')}</select></div>
+      <div class="sc-intro muted">${k ? '' : vet ? `${esc(d.name)} ya conoce ${esc(T.name)}: empieza con la trazada de manual y lo que puede ganar son décimas.` : `${esc(d.name)} no ha corrido nunca en ${esc(T.name)}: empieza de cero, con miedo y por el centro de la pista.`}</div>
+      <div class="sc-stages">${stages}</div>
+      ${status}
+      ${nums}
+      <div class="sc-vis">${schChartSVG(k || {}, chartSt)}${schMapSVG(T, k ? k.th : vet ? null : SCHOOL.rookieTh(T), apt)}</div>
+      <div class="sc-leg muted"><span class="l1"></span>trazada de manual <span class="l2"></span>la suya</div>
+      <div class="sc-apt"><b>Lo que aprovecha de lo aprendido</b> (sus stats): curvas rápidas ${pc(apt.fast)} · curvas lentas ${pc(apt.slow)} · frenada ${pc(apt.brake)} · trazada ${pc(apt.line)} · batería ${pc(0.5 + 0.5 * apt.energy)}</div>
+      <div class="ac-row sc-act">
+        ${mine ? '<button class="btn big" id="scStop">⏸ Parar</button>' : `<button class="btn big" id="scGo">▶ ${k && k.g ? 'Seguir entrenando' : 'Empezar'}</button>`}
+        ${k ? `<button class="btn ghost" id="scReset" title="Olvidar lo aprendido en este circuito y volver a empezar como un novato">↺ Desde cero</button>` : ''}
+        <button class="btn ghost" id="scCores" title="Hilos del procesador para entrenar (más, más rápido, pero gasta más batería)">🧵 ${S.settings.schoolCores || 'auto'}</button>
+      </div>
+      ${known ? `<h3>Lo que sabe ${esc(d.name)} de cada circuito</h3><table class="sc-tab"><tr><th>Circuito</th><th>Etapas</th><th>Frente al manual</th></tr>${known}</table>` : ''}
+    </div>`;
+  $('#scBack').onclick = () => { closeModal(); if (!S.race || S.placeholder) showHome(); };
+  $('#scDrv').onchange = (e) => { S.schDrv = e.target.value; renderSchool(); };
+  $('#scTrk').onchange = (e) => { S.schTrk = e.target.value; renderSchool(); };
+  if ($('#scGo')) $('#scGo').onclick = () => { if (S.race && !S.placeholder && S.race.phase !== 'done') { flash('TERMINA LA CARRERA ANTES DE ENTRENAR', 1400); return; } schoolStart(d, tid); };
+  if ($('#scStop')) $('#scStop').onclick = () => schoolStop();
+  if ($('#scReset')) $('#scReset').onclick = () => { if (!confirm(`¿Olvidar lo que sabe ${d.name} de ${T.name} y empezar como un novato?`)) return; if (mine) schoolStop(true); const vetNow = knVet(d, tid); d.kn[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: vetNow, hold: vetNow, hist: [] }; knSave({ d }); renderSchool(); };
+  $('#scCores').onclick = () => { const o = [0, 1, 2, 4, 6], i = o.indexOf(S.settings.schoolCores || 0); S.settings.schoolCores = o[(i + 1) % o.length]; saveAll(); const was = SCH.run; if (was) schoolStop(true); schoolKill(); if (was) schoolStart(was.d, was.tid, was.stage); renderSchool(); };
+  $$('#mbox [data-scst]').forEach((b) => (b.onclick = () => { const i = +b.dataset.scst; if (i > done) return; if (S.race && !S.placeholder && S.race.phase !== 'done') { flash('TERMINA LA CARRERA ANTES DE ENTRENAR', 1400); return; } schoolStart(d, tid, i); }));
 }
 // ---------------- Examen por categorías ----------------
 // siempre con los 8 pilotos de serie (4 escuderías) y los estrategas de partida: aunque en tu temporada cambien, la nota se puede comparar
@@ -14461,7 +15009,8 @@ const devOf = (tm) => (((tm.car && tm.car.desarrollo) || 72) + (tm.jefe && tm.je
 const seasonOn = () => !!(S.champ.season && S.champ.season.active);
 const isFree = () => S.settings.mode === 'libre';
 const mgrTeam = () => (seasonOn() && S.raceMode !== 'libre' ? S.champ.season.manager : null);
-const money = (x) => (Math.round(x * 10) / 10).toLocaleString('es-ES') + ' M€';
+// v1.19: cantidades pequeñas (patrocinio por punto) en miles de euros: antes salía «0 M€ por punto»
+const money = (x) => Math.abs(x) > 0 && Math.abs(x) < 0.1 ? Math.round(x * 1000).toLocaleString('es-ES') + ' mil €' : (Math.round(x * 10) / 10).toLocaleString('es-ES') + ' M€';
 const upCost = (v) => Math.round((3 + Math.max(0, v - 65) * 0.4) * 10) / 10;
 const upCostTm = (tm, k) => Math.round(upCost(tm.car[k]) * (k === 'desarrollo' ? 1 : 1.35 - 0.5 * devOf(tm)) * 10) / 10;
 function salaryOf(d) { return Math.round((0.3 + Math.max(0, DATA.overall(d.stats) - 60) * 0.06 + (DATA.rarityOf(d).id === 'leyenda' ? 0.4 : 0)) * 100) / 100; }
