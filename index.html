@@ -1325,12 +1325,22 @@ body.focus #rcMsg.on{top:calc(var(--rcT,48px) + var(--sat) + var(--topx))}
 .sc-tab td,.sc-tab th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}
 @media (max-width:520px){.sc-stages{grid-template-columns:1fr}.sc-vis{grid-template-columns:1fr}}
 @media (max-width:520px){.sc-map{height:230px}}
+.sc-mode{margin:2px 0 8px}
+.sc-who{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 6px;font-size:12px}
+.sc-tab tr[data-sctrk]{cursor:pointer}
+
+/* v1.21: siete etapas */
+.sc-stages{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.sc-res td:first-child{white-space:nowrap;vertical-align:top}
+.sc-res{margin:8px 0}
+.sc-res b.dn{color:#ff8a8a}
+@media (max-width:520px){.sc-stages{grid-template-columns:1fr 1fr}.sc-st small{font-size:10px}.sc-st{padding:6px}}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.19 · FASE 19</small></div>
+    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.21.1 · FASE 21</small></div>
     <button class="btn" id="btnMenu" title="Menú: todas las opciones">☰<span class="long"> Menú</span></button>
     <div id="raceinfo">
       <div class="lap"><span id="lapLbl">VUELTA</span> <b id="lapNow">–</b><span>/<b id="lapTot">–</b></span></div>
@@ -2014,29 +2024,48 @@ function riskLogit(a, c, tr) {
 //  0 = lo de siempre (la trazada de manual); negativo = no conoce el circuito (va con miedo y por el centro);
 //  positivo = apura más que el manual. Lo que se aprovecha de esa confianza lo marcan sus stats.
 // =====================================================================
-const KN_C = 4; // por curva: paso por curva, frenada, anchura de trazada y cuánto de eso se atreve a usar con tráfico
-const knSize = (T) => T.corners.length * (KN_C + 2);
-const KN_ROOKIE = [-0.5, -0.5, -1.1, 0]; // lo que «sabe» de un circuito quien nunca ha corrido en él
+// por curva (v1.21): 0 paso por curva · 1 frenada · 2 anchura de trazada · 3 cuánto apura con tráfico · 4 cuidar gomas ·
+// 5 línea de lluvia · 6 confianza en mojado · 7 ganas de atacar · 8 lado del ataque (dentro/fuera) · 9 cruzarse a la salida · 10 tapar el interior
+const KN_C = 11, KN_G = 4; // y por circuito: lado en la salida · cuánto aguanta su carril · valentía en la 1.ª vuelta · apretar con gomas frías
+const knSize = (T) => T.corners.length * (KN_C + 2) + KN_G;
+const knBat = (T) => T.corners.length * KN_C, knGlob = (T) => T.corners.length * (KN_C + 2);
+const KN_ROOKIE = [-0.5, -0.5, -1.1, 0, 0, 0, -0.5, 0, 0, 0, 0]; // lo que «sabe» de un circuito quien nunca ha corrido en él
+// lo aprendido con versiones anteriores (4 cosas por curva y la batería) pasa al formato nuevo
+function knMigrate(T, th) {
+  const nc = T.corners.length, n = knSize(T);
+  if (!th || th.length === n) return th;
+  if (th.length === nc * 6) { const o = new Array(n).fill(0); for (let j = 0; j < nc; j++) for (let k = 0; k < 4; k++) o[j * KN_C + k] = th[j * 4 + k]; for (let i = 0; i < 2 * nc; i++) o[nc * KN_C + i] = th[nc * 4 + i]; return o; }
+  return null;
+}
 function knApt(stats) {
   const st = stats || {}, a = (k) => clamp(((st[k] ?? 75) - 45) / 50, 0.15, 1);
-  return { fast: a('rapidas'), slow: a('lentas'), brake: a('frenada'), line: 0.6 + 0.4 * a('consistencia'), energy: a('energia') };
+  return { fast: a('rapidas'), slow: a('lentas'), brake: a('frenada'), line: 0.6 + 0.4 * a('consistencia'), energy: a('energia'), wet: a('lluvia'), atk: a('adelantar'), def: a('defender'), start: a('salidas'), tyre: a('ritmo') };
 }
 function buildKn(T, th, apt) {
   const N = T.N, nc = T.corners.length, ds = T.ds;
   apt = apt || { fast: 1, slow: 1, brake: 1, line: 1, energy: 1 };
   const gC = new Float32Array(N), bC = new Float32Array(N), tC = new Float32Array(N), lwS = new Float32Array(N), wS = new Float32Array(N), dep = new Float32Array(N);
+  const sC = new Float32Array(N), wO = new Float32Array(N), wG = new Float32Array(N), fA = new Float32Array(nc), fS = new Float32Array(nc), fX = new Float32Array(nc), fD = new Float32Array(nc);
+  const at = (k) => (apt[k] ?? 1);
   const ramp = Math.round(25 / ds);
   for (let j = 0; j < nc; j++) {
     const cr = T.corners[j], a0 = mod(cr.brake - Math.round(10 / ds), N), len = mod(cr.exit - a0, N) + Math.round(10 / ds);
     const g = Math.tanh(th[KN_C * j] || 0), b = Math.tanh(th[KN_C * j + 1] || 0), lw = Math.tanh(th[KN_C * j + 2] || 0), tc = Math.max(0, Math.tanh(th[KN_C * j + 3] || 0));
     const ag = cr.vApex > 45 ? apt.fast : apt.slow;
     const gE = g > 0 ? g * ag : g, bE = b > 0 ? b * apt.brake : b, lE = lw > 0 ? lw * apt.line : lw;
+    const sv = Math.max(0, Math.tanh(th[KN_C * j + 4] || 0)) * (0.6 + 0.4 * at('tyre')), wo = Math.max(0, Math.tanh(th[KN_C * j + 5] || 0)), wg0 = Math.tanh(th[KN_C * j + 6] || 0), wg = wg0 > 0 ? wg0 * at('wet') : wg0;
+    // peleas: ganas de atacar aquí (las aprovecha según «adelantar»), por qué lado, si se cruza a la salida y si tapa el interior
+    const fa0 = Math.tanh(th[KN_C * j + 7] || 0), fd0 = Math.tanh(th[KN_C * j + 10] || 0);
+    fA[j] = fa0 > 0 ? fa0 * (0.5 + 0.5 * at('atk')) : fa0; fS[j] = Math.tanh(th[KN_C * j + 8] || 0); fX[j] = Math.tanh(th[KN_C * j + 9] || 0); fD[j] = fd0 > 0 ? fd0 * (0.5 + 0.5 * at('def')) : fd0;
     for (let q = -ramp; q <= len + ramp; q++) {
       const i = mod(a0 + q, N), wgt = q < 0 ? 1 + q / ramp : q > len ? 1 - (q - len) / ramp : 1;
       if (wgt <= 0) continue;
       if (Math.abs(wgt * gE) > Math.abs(gC[i])) gC[i] = wgt * gE;
       if (Math.abs(wgt * bE) > Math.abs(bC[i])) bC[i] = wgt * bE;
       if (wgt * tc > tC[i]) tC[i] = wgt * tc;
+      if (wgt * sv > sC[i]) sC[i] = wgt * sv;
+      if (wgt * wo > wO[i]) wO[i] = wgt * wo;
+      if (Math.abs(wgt * wg) > Math.abs(wG[i])) wG[i] = wgt * wg;
       lwS[i] += wgt * lE; wS[i] += wgt;
     }
     // recta que sale de esta curva hasta la frenada de la siguiente: cuánto le compensa gastar batería ahí
@@ -2045,8 +2074,12 @@ function buildKn(T, th, apt) {
     const d1 = Math.tanh(th[KN_C * nc + 2 * j] || 0) * ek, d2 = Math.tanh(th[KN_C * nc + 2 * j + 1] || 0) * ek, cut = Math.round(sl * 0.45);
     for (let q = 0; q < sl; q++) dep[mod(st + q, N)] = q < cut ? d1 : d2;
   }
+  // por circuito: salida, primera vuelta y gomas frías
+  const G = knGlob(T), gl = (i) => Math.tanh(th[G + i] || 0);
+  const glob = { st0: gl(0) * (0.5 + 0.5 * at('start')), st1: gl(1), lap1: gl(2), cold: Math.max(0, gl(3)) };
+  const extra = { sC, wO, wG, fA, fS, fX, fD, glob };
   // trazada: si no cambia la anchura, la de manual tal cual
-  if (!lwS.some((x) => Math.abs(x) > 1e-4)) return { d: T.dRL, k: T.kRL, dR: T.dRL, kR: T.kRL, gC, bC, tC, dep };
+  if (!lwS.some((x) => Math.abs(x) > 1e-4)) return Object.assign({ d: T.dRL, k: T.kRL, dR: T.dRL, kR: T.kRL, gC, bC, tC, dep }, extra);
   // más estrecha que la de manual: hasta un 25 % (el novato va por el centro); más ancha, solo un poco (la de manual ya
   // apura hasta casi el piano: medido en v1.16, más al borde los coches se salían mucho más en carrera)
   const lim = T.hw - 1.2;
@@ -2061,7 +2094,7 @@ function buildKn(T, th, apt) {
     return { d, k: smoothClosed(curvatureOf(px, py, 3), 3) };
   };
   const Q = line(1), Rc = lwS.some((x) => x > 1e-4) ? line(0.35) : Q;
-  return { d: Q.d, k: Q.k, dR: Rc.d, kR: Rc.k, gC, bC, tC, dep };
+  return Object.assign({ d: Q.d, k: Q.k, dR: Rc.d, kR: Rc.k, gC, bC, tC, dep }, extra);
 }
 // confianza → agarre y frenada que se atreve a usar (con margen hasta el límite real)
 let KN_GMAX = 0.999;
@@ -2316,7 +2349,7 @@ class Race {
         st: stratFromZ(this.o.strat && this.o.strat[en.team.id]),
       };
       // v1.19: lo que sabe de este circuito (escuela de pilotaje)
-      { const kn = this.o.kn && this.o.kn[en.driver.id]; if (kn && kn.th && kn.th.length === knSize(T)) { try { c.kn = buildKn(T, kn.th, knApt(en.driver.stats)); } catch (e) { c.kn = null; } } }
+      { const kn = this.o.kn && this.o.kn[en.driver.id], th = kn && knMigrate(T, kn.th); if (th) { try { c.kn = buildKn(T, th, knApt(en.driver.stats)); } catch (e) { c.kn = null; } } }
       if (this.o.flying) {
         c.sTot = -150; c.v = 45; c.d = T.dRL[mod(Math.round(-150 / T.ds), T.N)];
         c.tyre = this.o.startTyre || 'S'; c.tT = 0.85;
@@ -2331,6 +2364,7 @@ class Race {
         c.d = gp % 2 === 0 ? -3 : 3;
         c.launchT = (0.13 + 0.26 * (1 - (p.start ?? p.cons)) * this.rng() + 0.07 * this.rng()) * (p.tr.has('cohete') ? 0.6 : 1);
         c.mode = 'start'; c.w = 0; c.wT = 0; c.dLane = c.d * 1.15;
+        if (c.kn && c.kn.glob.st0) { const cr1 = T.corners[T.nextCorner[0]]; if (cr1) c.dLane = clamp(c.dLane + c.kn.glob.st0 * 2.4 * cr1.side, -(T.hw - 1.2), T.hw - 1.2); } // v1.21: hacia dónde se abre en la salida
         c.launchF = p.tr.has('cohete') ? 0.99 : 0.85 + 0.05 * (p.start ?? p.cons) + 0.1 * this.rng() * (0.5 + 0.5 * (p.start ?? p.cons));
         // fallos en la salida: calarse (a veces sin remedio) o salir antes de tiempo
         if (!this.o.noStall && !p.tr.has('cohete')) {
@@ -3252,7 +3286,7 @@ class Race {
     for (let i = 0; i < n; i++) {
       const c = cars[i], p = c.p;
       const idx = this.idxOf(c);
-      const qLine = this.quali || this.o.flying, KN = c.kn; // v1.19: su trazada (escuela de pilotaje)
+      const qLine = this.quali || (this.o.flying && !this.o.raceLike), KN = c.kn; // v1.19: su trazada (escuela de pilotaje)
       const KD = KN ? (qLine ? KN.d : KN.dR) : T.dRL, KK = KN ? (qLine ? KN.k : KN.kR) : T.kRL;
 
       // ---- salida ----
@@ -3376,6 +3410,16 @@ class Race {
         // v1.13: táctica del muro: atacar al de delante o defenderse del de detrás (y gastar batería en ello)
         if (dec && c.tactic === 'atacar') dec.attack = 1;
         if (dec && c.tactic === 'defender') dec.defend = 1;
+        // v1.21: lo aprendido en la escuela (etapa «Pelea»): en qué curvas atacar, por qué lado, si cruzarse y si tapar el interior
+        if (dec && KN && ob.corner && !this.quali && !c.tactic) {
+          const j = ob.corner.idx, fa = KN.fA[j], fs = KN.fS[j], fx = KN.fX[j], fd = KN.fD[j];
+          if (dec.attack) { if (dec.attack + 0.35 * fa < 0.5) dec.attack = 0; }
+          else if (fa > 0.55 && ob.canAttack && ob.ahead && ob.ahead.gap < 14 && ob.ahead.closing > -0.5 && !ob.ahead.mate) { dec.attack = 0.55; dec.side = ob.corner.side; }
+          if (dec.attack) { if (fs > 0.35) dec.side = ob.corner.side; else if (fs < -0.35) dec.side = -ob.corner.side; }
+          if (Math.abs(fx) > 0.3) dec.cross = fx > 0 ? 1 : 0;
+          if (dec.defend && fd < -0.4) dec.defend = 0;
+          else if (!dec.defend && fd > 0.5 && ob.canDefend && ob.behind && ob.behind.gap < 10) dec.defend = 1;
+        }
         if (dec) { c.risk = clamp(dec.risk + (c.paceK ? c.paceK.risk : 0), 0, 1); c.riskSum += c.risk; c.riskN++; c.lastDec = dec; c.save = c.paceMode && c.paceMode !== 'normal' ? 0 : clamp(dec.save ?? 0, 0, 1); c.saveSum = (c.saveSum || 0) + c.save; }
         // batería: lo que decide el piloto (o la orden del muro: gastar / guardar)
         c.boostWant = this.quali ? (c.qState === 'fly' ? 1 : 0) : this.o.flying ? 1 : c.batOrder === 'gasta' ? 1 : c.batOrder === 'guarda' ? 0
@@ -3391,6 +3435,7 @@ class Race {
         c.offOn = !!dec && (dec.offLine ?? 0) > 0.5;
         if (dec) { c.gapK = clamp(dec.gap ?? 1, 0.55, 1.6); c.brakeK = clamp(dec.brake ?? 0, -1, 1); c.holdP = clamp(dec.hold ?? 0, 0, 1); }
         c.wetOff = dec ? clamp(dec.wetLine ?? 0, 0, 1) : 0;
+        if (KN && this.wx.wet > 0.15) c.wetOff = KN.wO[idx]; // v1.21: su línea de lluvia (escuela, etapa «Lluvia»)
         if (dec && (dec.box ?? 0) > 0.5 && !c.pitPlan && !c.pit) { if (!c.boxCall || t - c.boxCall > 40) { c.boxCall = t; c.boxCalls = (c.boxCalls || 0) + 1; } }
         if (dec) { c.liftN = (c.liftN || 0) + (c.liftOn ? 1 : 0); c.hangN = (c.hangN || 0) + (c.hangOn ? 1 : 0); c.decN = (c.decN || 0) + 1; }
         if (dec && c.mode === 'normal' && ob.corner && !approachPit) {
@@ -3459,7 +3504,7 @@ class Race {
           }
         }
       }
-      if (c.mode === 'start' && sinceLaunch > 4.2 + (c.id % 3) * 0.4) { c.mode = 'normal'; c.wT = 1; }
+      if (c.mode === 'start' && sinceLaunch > (KN ? 4.2 + 1.4 * KN.glob.st1 : 4.2) + (c.id % 3) * 0.4) { c.mode = 'normal'; c.wT = 1; }
       if (c.mode !== 'normal' && c.mode !== 'start' && c.modeCorner >= 0) {
         const cr = T.corners[c.modeCorner];
         const past = mod(idx - cr.apex, N);
@@ -3701,9 +3746,18 @@ class Race {
         if (j > 0 && c.wT !== w) { const k2 = c.wT * KK[q] + (1 - c.wT) * this.laneK(q, c.dLane); if (Math.abs(k2) > Math.abs(kq)) kq = k2; }
         // (en carrera se guarda algo de margen: solo en clasificación y vuelta lanzada se va al límite de lo aprendido;
         // con coches cerca, solo lo que ha aprendido en la etapa «Limpio» que puede apurar sin tocarse)
-        const xg0 = KN ? KN.gC[q] : 0, xb0 = KN ? KN.bC[q] : 0, rK = (qLine ? 1 : 0.45) * (inTr ? KN.tC[q] : 1);
-        const xg = KN ? (xg0 > 0 ? xg0 * rK : xg0) : 0, xb = KN ? (xb0 > 0 ? xb0 * rK : xb0) : 0;
-        const gq = xg ? knG(g, xg) : g, bq = xb ? knB(b, xb) : b;
+        let xg = 0, xb = 0;
+        if (KN) {
+          // en mojado manda lo aprendido en la etapa «Lluvia»; en seco, lo de «Rápido» (con margen en carrera y con tráfico)
+          const wetK = wetC > 0.15, xg0 = wetK ? KN.wG[q] : KN.gC[q], xb0 = wetK ? KN.wG[q] : KN.bC[q], rK = (qLine ? 1 : 0.45) * (inTr ? KN.tC[q] : 1);
+          xg = xg0 > 0 ? xg0 * rK : xg0; xb = xb0 > 0 ? xb0 * rK : xb0;
+          if (!qLine) {
+            if (c.lapsDone === 0 && this.startT !== null && inTr) { xg += 0.3 * KN.glob.lap1; xb += 0.3 * KN.glob.lap1; } // primera vuelta
+            if (c.tT < 0.8 && KN.glob.cold) xg += 0.35 * KN.glob.cold; // apretar algo con las gomas frías para calentarlas
+          }
+        }
+        let gq = xg ? knG(g, xg) : g; const bq = xb ? knB(b, xb) : b;
+        if (KN && !qLine && KN.sC[q]) gq *= 1 - 0.025 * KN.sC[q]; // cuidar las gomas en esta curva
         const vc = cornerSpeed(kq, pudA && T.puddleId[q] === pudA.id ? gPud : gq, aeroSeen);
         if (vc >= vAllow) continue;
         const va = brakeReach(vc, Math.max(0, j * ds - frac), bq);
@@ -4172,6 +4226,7 @@ class Race {
         // v1.16: ×1,3 para que el desgaste real case con lo que calcula el estratega (medido: se gastaban un ~25 % menos de lo previsto)
         let wr = 1.3 * this.wearBase * cpd.wear * p.tyreC * this.wearMul * this.tempF * (0.75 + 0.5 * c.risk) * (0.55 + 0.9 * load) * (c.sliding ? 3 : 1) * (c.paceK ? c.paceK.wear : 1) * (1 - 0.35 * (c.save || 0)) * (1 + 1.8 * c.dirty); // en aire sucio las gomas sufren
         if (c.finished) wr = 0; // v1.13: tras la bandera (vuelta de enfriamiento) las gomas ya no se gastan
+        if (c.kn && c.kn.sC[idx] && !(this.quali || (this.o.flying && !this.o.raceLike))) wr *= 1 - 0.45 * c.kn.sC[idx]; // v1.21: cuidándolas en esta curva
         if (!cpd.dry) wr *= 1 + 6 * Math.max(0, 0.3 - wet);
         if (c.tT > 1.08) wr *= 1 + 1.6 * (c.tT - 1.08);
         c.wear = Math.min(1.1, c.wear + dist * wr);
@@ -4570,7 +4625,7 @@ function qualify(T, entries, seed, opts) {
   return out.sort((a, b) => a.time - b.time);
 }
 
-const SIM = { setKnGmax: (v) => { KN_GMAX = v; }, knSize, buildKn, knApt, KN_C, KN_ROOKIE, speedProfile, curvatureOf, smoothClosed, realWeather, climateOf, TRACK_DRS, CLIMATE, boostFree, holdBase, offLineBase, defLineBase, crossBase, liftBase, hangBase, wetLineBase, boxBase, BAT, boostBase, wideBase, squeezeBase, saveBase, STRAT_KEYS, STRAT_RANGE, STRAT_DEFAULT_Z, stratFromZ, P, POINTS, COMPOUNDS, PIT_LOSS, tyreGrip, carParams, makeRng, buildTrack, validateTrack, splinePoints, poseAt, driverParams, RuleBrain, Race, qualify, pitBoxes, mod, clamp, wrapA };
+const SIM = { setKnGmax: (v) => { KN_GMAX = v; }, knSize, knMigrate, knBat, knGlob, KN_G, buildKn, knApt, KN_C, KN_ROOKIE, speedProfile, curvatureOf, smoothClosed, realWeather, climateOf, TRACK_DRS, CLIMATE, boostFree, holdBase, offLineBase, defLineBase, crossBase, liftBase, hangBase, wetLineBase, boxBase, BAT, boostBase, wideBase, squeezeBase, saveBase, STRAT_KEYS, STRAT_RANGE, STRAT_DEFAULT_Z, stratFromZ, P, POINTS, COMPOUNDS, PIT_LOSS, tyreGrip, carParams, makeRng, buildTrack, validateTrack, splinePoints, poseAt, driverParams, RuleBrain, Race, qualify, pitBoxes, mod, clamp, wrapA };
 if (typeof module !== 'undefined' && module.exports) module.exports = SIM;
 else global.SIM = SIM;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -6148,10 +6203,11 @@ else global.DATA = DATA;
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script id="srcSchool">// =====================================================================
-//  v1.19: ESCUELA DE PILOTAJE
-//  Un piloto aprende cada circuito por etapas, como pedías: primero a ir rápido (vuelta lanzada solo),
-//  luego a ir limpio con tráfico y por último a gastar bien la batería en carrera.
-//  Lo que aprende (por curva y por recta) es lo que usa después en las carreras; lo que aprovecha lo marcan sus stats.
+//  ESCUELA DE PILOTAJE (v1.19, ampliada en v1.21)
+//  Un piloto aprende cada circuito por etapas: rápido, limpio, batería, gomas, lluvia, salidas y pelea.
+//  Lo que aprende (por curva, por recta y por circuito) es lo que usa después en las carreras; lo que aprovecha lo
+//  marcan sus stats. Cada etapa se mide en segundos y, siempre que se puede, curva a curva: así cada curva sabe qué
+//  le ha salido bien o mal a ella (es lo que hace que aprenda deprisa y no se pierda en el ruido de una carrera entera).
 //  Este archivo corre también dentro de los hilos de entrenamiento (sin pantalla).
 // =====================================================================
 (function (global) {
@@ -6160,6 +6216,10 @@ else global.DATA = DATA;
     { id: 'rapido', ic: '⚡', name: 'Rápido', what: 'Solo en pista, vuelta lanzada: trazada, frenadas y paso por curva', mask: 'corner', sigma: 0.35, lr: 0.12, pairs: 8, maxG: 160, stall: 16 },
     { id: 'limpio', ic: '🧽', name: 'Limpio', what: 'Con cinco rivales: en qué curvas puede apurar lo aprendido con coches cerca sin salirse ni tocarse', mask: 'traffic', sigma: 0.4, lr: 0.1, pairs: 6, maxG: 16, stall: 6 },
     { id: 'bateria', ic: '🔋', name: 'Batería', what: 'Tanda de carrera: en qué rectas gastar la batería y dónde guardarla', mask: 'bat', sigma: 0.55, lr: 0.12, pairs: 6, maxG: 20, stall: 7 },
+    { id: 'gomas', ic: '🛞', name: 'Gomas', what: 'Tanda larga desde gomas frías: en qué curvas cuidarlas (lo que se ahorra vale media parada) y cuánto apretar para calentarlas', mask: 'tyre', sigma: 0.45, lr: 0.1, pairs: 6, maxG: 30, stall: 8 },
+    { id: 'lluvia', ic: '🌧', name: 'Lluvia', what: 'Vuelta lanzada en mojado: su propia línea (fuera de la goma) y cuánto apurar en cada curva', mask: 'wet', sigma: 0.35, lr: 0.12, pairs: 8, maxG: 60, stall: 12 },
+    { id: 'salidas', ic: '🚦', name: 'Salidas', what: 'Salida con diez coches: hacia dónde abrirse, cuánto aguantar su carril y cómo llegar a la primera curva', mask: 'start', sigma: 0.5, lr: 0.12, pairs: 8, maxG: 20, stall: 7 },
+    { id: 'pelea', ic: '⚔', name: 'Pelea', what: 'Duelos curva a curva contra tres tipos de rival: dónde atacar, por qué lado, cuándo cruzarse y cuándo tapar el interior', mask: 'fight', sigma: 0.5, lr: 0.12, pairs: 6, maxG: 25, stall: 8 },
   ];
   const tracks = {};
   function trackOf(job) {
@@ -6168,13 +6228,53 @@ else global.DATA = DATA;
     return tracks[key];
   }
   function run(r, max) { let s = 0; while (r.phase !== 'done' && s++ < max) r.step(1 / 30); return r; }
-  // una prueba: lo que tarda y lo que ha hecho mal (menos es mejor)
+  // dónde empieza el tramo de cada curva (metros desde la línea de meta)
+  const bcache = {};
+  function bounds(T) {
+    const key = T.name + T.N;
+    if (!bcache[key]) bcache[key] = T.corners.map((cr) => ((cr.brake - Math.round(10 / T.ds) + T.N) % T.N) * T.ds);
+    return bcache[key];
+  }
+  // lo que cuesta de verdad un toque, en segundos: lo que se pierde con el coche roto el resto de la tanda (o la parada para
+  // arreglarlo, si sale más barato), las sanciones y el abandono
+  function hitCost(T, c) {
+    if (c.dnf) return 60;
+    const d = c.dmg || {}, loss = (T.refLap || 80) * (0.084 * (d.fw || 0) + 0.027 * (d.rw || 0) + 0.069 * (d.su || 0) + 0.022 * (d.sp || 0));
+    return Math.min(25, loss * 8) + (c.pen || 0) + (c.dtPending ? 20 : 0) + (c.punct ? 15 : 0);
+  }
+  // cronometra a un coche tramo a tramo (y cuánto gasta las gomas en cada uno) durante toda la carrera
+  function segRun(r, c, T, max) {
+    const bnd = bounds(T), nb = bnd.length, L = T.L, segT = new Array(nb).fill(0), segW = new Array(nb).fill(0);
+    let s0 = c.sTot, t0 = r.t, last = -1, tPrev = 0, wPrev = 0, steps = 0;
+    while (r.phase !== 'done' && steps++ < max) {
+      r.step(1 / 30);
+      const s1 = c.sTot, t1 = r.t;
+      for (let j = 0; j < nb; j++) {
+        const lapB = Math.floor((s1 - bnd[j]) / L);
+        if (s1 - bnd[j] >= 0 && Math.floor((s0 - bnd[j]) / L) < lapB) {
+          const tc = t0 + ((lapB * L + bnd[j]) - s0) / Math.max(1e-6, s1 - s0) * (t1 - t0);
+          if (last >= 0) { segT[last] += tc - tPrev; segW[last] += c.wear - wPrev; }
+          last = j; tPrev = tc; wPrev = c.wear;
+        }
+      }
+      s0 = s1; t0 = t1;
+      if (c.finished) break;
+    }
+    return { segT, segW };
+  }
+  // nota de cada curva a partir de los tramos: su tramo y el anterior (donde se frena para ella)
+  const perCorner = (seg, extra) => seg.map((_, j) => seg[(j - 1 + seg.length) % seg.length] + seg[j] + (extra || 0));
+
+  // los rivales llevan el mismo coche pero cada uno «su» equipo: si fueran compañeros no pelearían
+  const ownTeams = (rv) => rv.map((x, i) => (x && x.team && !/^rv\d/.test(x.team.id) ? { driver: x.driver, team: Object.assign({}, x.team, { id: 'rv' + i }) } : x));
   function evaluate(job) {
     const T = trackOf(job), en = job.entry, id = en.driver.id, kn = { [id]: { th: job.th } };
-    if (job.stage === 'rapido') {
-      // vuelta lanzada, cronometrando cada tramo (de la frenada de una curva a la de la siguiente): así cada curva
-      // sabe qué le ha salido bien o mal a ella, y no a toda la vuelta junta (aprende mucho más deprisa)
-      const r = new SIM.Race(T, [en], { laps: 1, seed: job.seed, weather: 'seco', flying: true, noSC: true, kn });
+    if (job.rivals) job.rivals = ownTeams(job.rivals);
+    if (job.stage === 'rapido' || job.stage === 'lluvia') {
+      // vuelta lanzada, cronometrando cada tramo (de la frenada de una curva a la de la siguiente)
+      const wetS = job.stage === 'lluvia';
+      const r = new SIM.Race(T, [en], { laps: 1, seed: job.seed, weather: wetS ? 'lluvia' : 'seco', flying: true, noSC: true, kn, startTyre: wetS ? 'I' : 'S' });
+      if (wetS) { r.wx.wet = 0.5 + 0.1 * ((job.seed % 3) - 1); r.wx.rain = r.wx.wet; }
       const c = r.cars[0], bnd = bounds(T), nb = bnd.length, tb = new Array(nb).fill(null);
       let s0 = c.sTot, t0 = r.t, tL = null, steps = 0;
       while (r.phase !== 'done' && steps++ < 9000) {
@@ -6185,10 +6285,10 @@ else global.DATA = DATA;
         s0 = s1; t0 = t1;
         if (c.finished || c.lapTimes.length) break;
       }
-      const lap = c.lapTimes[0] || 999, offs = (c.offs || 0) + (c.mistakes || 0), lim = c.limits || 0, pen = 2.5 * offs + 0.8 * lim;
-      let seg = null;
-      if (tL !== null && tb.every((x) => x !== null)) { const tEnd = tL + lap; seg = tb.map((x, j) => (j + 1 < nb ? tb[j + 1] : tEnd + (tb[0] - tL)) - x); }
-      return { f: lap + pen, lap, offs, lim, seg, pen };
+      const lap = c.lapTimes[0] || 999, offs = (c.offs || 0) + (c.mistakes || 0), lim = c.limits || 0, pen = (wetS ? 3 : 2.5) * offs + 0.8 * lim + (c.spin ? 4 : 0);
+      let seg = null, sc = null;
+      if (tL !== null && tb.every((x) => x !== null)) { const tEnd = tL + lap; seg = tb.map((x, j) => (j + 1 < nb ? tb[j + 1] : tEnd + (tb[0] - tL)) - x); sc = perCorner(seg, pen); }
+      return { f: lap + pen, lap, offs, lim, seg, pen, sc };
     }
     if (job.stage === 'limpio') {
       // sale quinto de seis: tiene que adelantar y aguantar a los de detrás sin salirse ni tocarse
@@ -6196,61 +6296,129 @@ else global.DATA = DATA;
       const r = run(new SIM.Race(T, ents, { laps: 3, seed: job.seed, weather: 'seco', noSC: true, kn, grid: ents.map((_, i) => i) }), 40000);
       const c = r.cars.find((x) => x.drv.id === id), time = c.finalTime || c.lapTimes.reduce((a, b) => a + b, 0) + (c.dnf ? 200 : 0);
       const offs = (c.offs || 0) + (c.mistakes || 0), ct = c.contacts || 0;
-      return { f: time + 3 * offs + 4 * ct + 1 * (c.limits || 0) + 8 * (c.causedCrashes || 0) + (c.dnf ? 120 : 0), lap: c.best || 0, offs, ct, time };
+      return { f: time + 3 * offs + 4 * ct + 1 * (c.limits || 0) + 8 * (c.causedCrashes || 0) + hitCost(T, c), lap: c.best || 0, offs, ct, time };
     }
-    // batería: tanda solo, salida parada, 3 vueltas; cuenta lo que tarda en las dos últimas
-    const r = run(new SIM.Race(T, [en], { laps: 3, seed: job.seed, weather: 'seco', noSC: true, kn }), 30000);
-    const c = r.cars[0], t2 = (c.lapTimes[1] || 120) + (c.lapTimes[2] || 120);
-    return { f: t2 + 2.5 * ((c.offs || 0) + (c.mistakes || 0)), lap: Math.min(c.lapTimes[1] || 999, c.lapTimes[2] || 999), time: t2 };
+    if (job.stage === 'bateria') {
+      // tanda solo, salida parada, 3 vueltas; cuenta lo que tarda en las dos últimas
+      const r = run(new SIM.Race(T, [en], { laps: 3, seed: job.seed, weather: 'seco', noSC: true, kn }), 30000);
+      const c = r.cars[0], t2 = (c.lapTimes[1] || 120) + (c.lapTimes[2] || 120);
+      return { f: t2 + 2.5 * ((c.offs || 0) + (c.mistakes || 0)), lap: Math.min(c.lapTimes[1] || 999, c.lapTimes[2] || 999), time: t2 };
+    }
+    if (job.stage === 'gomas') {
+      // tanda de 5 vueltas con las gomas desgastándose el triple de rápido (como una tanda de 15) desde gomas frías.
+      // Lo que se gasta se cobra en segundos: cada 0,75 de desgaste es una parada (unos 22 s), repartido entre las 3 tandas
+      const r = new SIM.Race(T, [en], { laps: 5, seed: job.seed, weather: 'seco', flying: true, raceLike: true, noSC: true, kn, startTyre: 'M', wear: 3 });
+      const c = r.cars[0]; c.tT = 0.5;
+      const { segT, segW } = segRun(r, c, T, 60000), Cw = 22 / 0.75 / 3;
+      const time = c.lapTimes.reduce((a, b) => a + b, 0) || 999, offs = (c.offs || 0) + (c.mistakes || 0), pen = 2.5 * offs + 0.8 * (c.limits || 0);
+      const seg = segT.map((t, j) => t + Cw * segW[j]);
+      return { f: time + Cw * c.wear + pen, time, wear: c.wear, lap: c.best || 0, offs, sc: perCorner(seg, pen), cost: time + Cw * c.wear };
+    }
+    if (job.stage === 'salidas') {
+      // salida con diez coches desde el 5.º o 6.º puesto (los dos lados de la parrilla); vale lo que tarda en la 1.ª vuelta
+      const rv = job.rivals || [], out = [];
+      // (hasta la salida de la 3.ª curva: ahí ya se ha decidido casi todo)
+      const nc = T.corners.length, chk = ((T.corners[Math.min(2, nc - 1)].exit + 20) % T.N) * T.ds;
+      for (const slot of [4, 5]) {
+        const ents = rv.slice(0, 9); ents.splice(slot, 0, en);
+        const r = new SIM.Race(T, ents, { laps: 1, seed: job.seed * 7 + slot, weather: 'seco', noSC: true, noStall: true, kn, grid: ents.map((_, i) => i) });
+        const c = r.cars.find((x) => x.drv.id === id); let steps = 0, tc = null;
+        while (r.phase !== 'done' && steps++ < 6000) { r.step(1 / 30); if (r.startT !== null && c.sTot >= chk) { tc = r.t - r.startT; break; } if (c.dnf) break; }
+        const pos = 1 + r.cars.filter((o) => o !== c && o.sTot > c.sTot).length;
+        out.push({ t: (tc ?? 60) + hitCost(T, c) + 3 * (c.contacts || 0), pos, grid: slot + 1, ct: c.contacts || 0 });
+      }
+      const f = (out[0].t + out[1].t) / 2;
+      return { f, time: f, gain: (out[0].grid - out[0].pos + out[1].grid - out[1].pos) / 2, ct: out[0].ct + out[1].ct, lap: 0 };
+    }
+    if (job.stage === 'pelea') return fight(T, job);
+    if (job.stage === 'prueba') {
+      // carrera de 5 vueltas con diez coches iguales; sale 5.º. Los rivales no usan lo aprendido
+      const rv = job.rivals || [], ents = rv.slice(0, 9); ents.splice(4, 0, en);
+      const r = run(new SIM.Race(T, ents, { laps: 5, seed: job.seed, weather: 'seco', noSC: true, kn, grid: ents.map((_, i) => i) }), 90000);
+      const c = r.cars.find((x) => x.drv.id === id);
+      return { f: c.pos, pos: c.pos, ct: c.contacts || 0, offs: (c.offs || 0) + (c.mistakes || 0), lap: c.best || 0 };
+    }
+    return { f: 1e9, lap: 0 };
   }
-  // dónde empieza el tramo de cada curva (metros desde la línea de meta)
-  const bcache = {};
-  function bounds(T) {
-    if (bcache[T.name + T.N]) return bcache[T.name + T.N];
-    const b = T.corners.map((cr) => ((cr.brake - Math.round(10 / T.ds) + T.N) % T.N) * T.ds);
-    return (bcache[T.name + T.N] = b);
+  // ---- duelos de laboratorio: dos coches iguales, una curva cada vez ----
+  // atacando: el entrenado va 0,25 s detrás con gomas nuevas contra uno con gomas gastadas; defendiendo, al revés.
+  // Se cronometra hasta pasada la curva siguiente: adelantar vale 1,5 s (lo que cuesta ir detrás el resto de la tanda)
+  const V_POS = 1.5;
+  function rivalOf(base, kind) {
+    const d = JSON.parse(JSON.stringify(base.driver)); d.id = 'rival_' + kind; d.rasgos = kind === 'muro' ? ['muro'] : [];
+    for (const k in d.stats) if (typeof d.stats[k] === 'number') d.stats[k] = Math.max(40, Math.min(99, d.stats[k] + (kind === 'flojo' ? -10 : 0)));
+    if (kind === 'muro') { d.stats.defender = 96; d.stats.agresividad = 90; }
+    return { driver: d, team: Object.assign(JSON.parse(JSON.stringify(base.team)), { id: 'rival_' + kind }) }; // mismo coche, otro equipo (entre compañeros no se pelea)
+  }
+  function duel(T, j, me, rival, attack, th, seed, drs) {
+    const N = T.N, nc = T.corners.length, cr = T.corners[j], nx = T.corners[(j + 1) % nc];
+    const ents = attack ? [rival, me] : [me, rival]; // el primero va delante
+    const r = new SIM.Race(T, ents, { laps: 9, seed, weather: 'seco', noSC: true, noStall: true, kn: { [me.driver.id]: { th } }, grid: [0, 1] });
+    const pv = T.corners[(j - 1 + nc) % nc], run0 = Math.max(150, Math.min(600, ((cr.brake - pv.exit + N) % N) * T.ds)); // desde la salida de la curva anterior
+    const iS = (cr.brake - Math.round(run0 / T.ds) + N * 4) % N, s0 = iS * T.ds + T.L; // empieza en la vuelta 1 (lejos de la salida)
+    const sEnd = s0 + ((nx.exit - iS + N * 4) % N) * T.ds + 40;
+    r.phase = 'racing'; r.startT = r.t - 40; r.drsFrom = drs ? 0 : 99;
+    const v0 = Math.min(85, 0.96 * T.vRL[iS]);
+    ents.forEach((_, k) => {
+      const c = r.cars[k], back = k === 0 ? 0 : P_GAP * v0 + 5.2;
+      c.sTot = s0 - back; c.lapsDone = 1; c.v = v0; c.d = T.dRL[iS]; c.mode = 'normal'; c.w = 1; c.wT = 1; c.launchT = 0; c.tT = 0.95; c.bat = 0.6;
+      c.wear = k === 0 ? 0.72 : 0.05; // el de delante, con gomas gastadas: el de detrás tiene ritmo para intentarlo
+    });
+    const meC = r.cars[attack ? 1 : 0], rvC = r.cars[attack ? 0 : 1];
+    let tMe = null, steps = 0, s0m = meC.sTot, t0 = r.t;
+    while (steps++ < 2400 && r.phase !== 'done') {
+      r.step(1 / 30);
+      if (tMe === null && meC.sTot >= sEnd) tMe = t0 + (sEnd - s0m) / Math.max(1e-6, meC.sTot - s0m) * (r.t - t0);
+      s0m = meC.sTot; t0 = r.t;
+      if (tMe !== null) break;
+      if (meC.dnf) break;
+    }
+    const time = tMe === null ? 60 : tMe - (r.startT + 40);
+    const ahead = meC.sTot > rvC.sTot;
+    const pos = attack ? (ahead ? 0 : V_POS) : (ahead ? 0 : V_POS);
+    return { f: time + pos + hitCost(T, meC), passed: attack ? ahead : !ahead, ct: meC.contacts || 0 };
+  }
+  const P_GAP = 0.25;
+  function fight(T, job) {
+    const nc = T.corners.length, base = (job.rivals && job.rivals[0]) || job.entry, kinds = ['flojo', 'normal', 'muro'];
+    const kind = job.kind || kinds[job.seed % 3], drs = job.drs ?? (job.seed % 2 === 0), rival = rivalOf(base, kind), sc = new Array(nc).fill(0);
+    let passA = 0, keepD = 0, ct = 0, tot = 0;
+    for (let j = 0; j < nc; j++) {
+      const a = duel(T, j, job.entry, rival, true, job.th, job.seed * 31 + j, drs), d = duel(T, j, job.entry, rival, false, job.th, job.seed * 37 + j, drs);
+      sc[j] = a.f + d.f; tot += sc[j]; if (a.passed) passA++; if (!d.passed) keepD++; ct += a.ct + d.ct;
+    }
+    return { f: tot, sc, passA, keepD, ct, n: nc, lap: 0, time: tot };
   }
   // qué parámetros toca cada etapa
   function maskIdx(T, mask) {
-    const nc = T.corners.length, out = [];
-    if (mask === 'corner') { for (let j = 0; j < nc; j++) for (let k = 0; k < 3; k++) out.push(j * SIM.KN_C + k); }
-    else if (mask === 'traffic') for (let j = 0; j < nc; j++) out.push(j * SIM.KN_C + 3);
-    else for (let i = 0; i < 2 * nc; i++) out.push(nc * SIM.KN_C + i);
+    const nc = T.corners.length, C = SIM.KN_C, B = SIM.knBat(T), G = SIM.knGlob(T), out = [];
+    const per = (ks) => { for (let j = 0; j < nc; j++) for (const k of ks) out.push(j * C + k); };
+    if (mask === 'corner') per([0, 1, 2]);
+    else if (mask === 'traffic') per([3]);
+    else if (mask === 'bat') for (let i = 0; i < 2 * nc; i++) out.push(B + i);
+    else if (mask === 'tyre') { per([4]); out.push(G + 3); }
+    else if (mask === 'wet') per([5, 6]);
+    else if (mask === 'start') out.push(G, G + 1, G + 2);
+    else if (mask === 'fight') per([7, 8, 9, 10]);
     return out;
   }
   // lo que sabe de un circuito quien nunca ha corrido en él
   function rookieTh(T) { const nc = T.corners.length, n = SIM.knSize(T), th = new Array(n).fill(0); for (let i = 0; i < nc * SIM.KN_C; i++) th[i] = SIM.KN_ROOKIE[i % SIM.KN_C]; return th; }
-  // estrategia evolutiva (como la academia de redes): se prueban variaciones por parejas opuestas y se avanza hacia las que salen mejor
+  // estrategia evolutiva: se prueban variaciones por parejas opuestas (con la misma suerte) y se avanza hacia las que salen mejor
   function gauss(rng) { return Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng()); }
-  function esPlan(st, idx, rng) { // perturbaciones de una generación
+  function esPlan(st, idx, rng) {
     const eps = [];
     for (let p = 0; p < st.pairs; p++) { const e = new Float64Array(idx.length); for (let i = 0; i < idx.length; i++) e[i] = gauss(rng); eps.push(e); }
     return eps;
   }
-  function esUpdate(S, st, idx, eps, fit) { // S: {th, m, v, t}; fit: [f+0, f-0, f+1, f-1, ...]
-    const n = fit.length, order = fit.map((f, i) => [f, i]).sort((a, b) => a[0] - b[0]), u = new Array(n);
-    order.forEach(([, i], r) => (u[i] = 0.5 - r / (n - 1))); // rango centrado: el mejor +0,5, el peor −0,5
+  const ranks = (sc) => { const n = sc.length, order = sc.map((f, i) => [f, i]).sort((a, b) => a[0] - b[0]), u = new Array(n); order.forEach(([, i], r) => (u[i] = 0.5 - r / (n - 1))); return u; };
+  // actualiza: cada parámetro de una curva con la nota de su curva (si la hay); los demás, con la nota total
+  function esStep(S, st, idx, eps, res, KN_C) {
+    const nc = res[0].sc ? res[0].sc.length : 0, useC = nc > 0 && res.every((r) => r.sc && r.sc.length === nc);
+    const Uc = useC ? Array.from({ length: nc }, (_, j) => ranks(res.map((r) => r.sc[j]))) : null, Ut = ranks(res.map((r) => r.f));
     S.t = (S.t || 0) + 1; const b1 = 0.9, b2 = 0.999;
     for (let k = 0; k < idx.length; k++) {
-      let g = 0; for (let p = 0; p < eps.length; p++) g += (u[2 * p] - u[2 * p + 1]) * eps[p][k];
-      g /= eps.length * st.sigma;
-      const i = idx[k];
-      S.m[i] = b1 * (S.m[i] || 0) + (1 - b1) * g; S.v[i] = b2 * (S.v[i] || 0) + (1 - b2) * g * g;
-      S.th[i] += st.lr * (S.m[i] / (1 - b1 ** S.t)) / (Math.sqrt(S.v[i] / (1 - b2 ** S.t)) + 1e-8);
-      S.th[i] = Math.max(-2.5, Math.min(2.5, S.th[i]));
-    }
-  }
-  // como esUpdate, pero cada curva con su propia nota (su tramo y el anterior, donde frena)
-  function esUpdateSeg(S, st, idx, eps, res, KN_C) {
-    const n = res.length, nc = res[0].seg.length, b1 = 0.9, b2 = 0.999;
-    S.t = (S.t || 0) + 1;
-    const U = [];
-    for (let j = 0; j < nc; j++) {
-      const sc = res.map((r) => r.seg[(j - 1 + nc) % nc] + r.seg[j] + r.pen), order = sc.map((f, i) => [f, i]).sort((a, b) => a[0] - b[0]), u = new Array(n);
-      order.forEach(([, i], rk) => (u[i] = 0.5 - rk / (n - 1))); U.push(u);
-    }
-    for (let k = 0; k < idx.length; k++) {
-      const i = idx[k], j = Math.floor(i / KN_C), u = U[j];
+      const i = idx[k], j = Math.floor(i / KN_C), u = useC && j < nc ? Uc[j] : Ut;
       let g = 0; for (let p = 0; p < eps.length; p++) g += (u[2 * p] - u[2 * p + 1]) * eps[p][k];
       g /= eps.length * st.sigma;
       S.m[i] = b1 * (S.m[i] || 0) + (1 - b1) * g; S.v[i] = b2 * (S.v[i] || 0) + (1 - b2) * g * g;
@@ -6258,7 +6426,12 @@ else global.DATA = DATA;
       S.th[i] = Math.max(-2.5, Math.min(2.5, S.th[i]));
     }
   }
-  const SCHOOL = { STAGES, evaluate, maskIdx, rookieTh, esPlan, esUpdate, esUpdateSeg };
+  // compatibilidad con la v1.19/1.20
+  const esUpdate = (S, st, idx, eps, fit) => esStep(S, st, idx, eps, fit.map((f) => ({ f })), 1e9);
+  const esUpdateSeg = (S, st, idx, eps, res, KN_C) => esStep(S, st, idx, eps, res.map((r) => ({ f: r.f, sc: r.seg ? perCorner(r.seg, r.pen) : null })), KN_C);
+  // rasgos de cada curva (para aprovechar en un circuito nuevo lo aprendido en curvas parecidas de otros)
+  function cornerFeat(T) { return T.corners.map((cr) => [Math.round(cr.vApex * 10) / 10, Math.round((cr.vEntry - cr.vApex) * 10) / 10, Math.round(Math.min(400, cr.approach || 0))]); }
+  const SCHOOL = { STAGES, evaluate, maskIdx, rookieTh, esPlan, esStep, esUpdate, esUpdateSeg, cornerFeat };
   if (typeof module !== 'undefined' && module.exports) module.exports = SCHOOL;
   else global.SCHOOL = SCHOOL;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -8486,7 +8659,7 @@ function showGraphics() {
 }
 
 // ---------------- Pasar los datos a otro aparato ----------------
-const DATA_FILES = ['campeonato.json', 'ajustes.json', 'cerebros.json', 'escuderias.json', 'circuitos.json', 'estrategas.json', 'redes.json', 'estrategas_lib.json', 'leyendas.json'];
+const DATA_FILES = ['campeonato.json', 'ajustes.json', 'cerebros.json', 'escuderias.json', 'circuitos.json', 'estrategas.json', 'redes.json', 'estrategas_lib.json', 'leyendas.json', 'escuela.json'];
 async function exportAll() {
   const out = { app: 'CarrerasLab', version: 1, fecha: new Date().toISOString(), files: {} };
   for (const n of DATA_FILES) { const d = await Store.load(n); if (d) out.files[n] = d; }
@@ -10989,7 +11162,7 @@ function startQuali(phase) {
   for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
   S.wxNow = raceWx(S.seed);
   schoolPause('clasificación');
-  S.race = new SIM.Race(S.T, ents, { kn: knFor(ents, S.trackId, S.T), quali: S.settings.qMode === 'ver2' ? 2 : 1, seed: S.seed + (S.qf ? S.qf.phase : 0), grid: order, weather: S.wxNow.weather, temp: S.wxNow.temp, wear: WEARMUL[S.settings.wear] || 1, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+  S.race = new SIM.Race(S.T, ents, { kn: knFor(ents, S.trackId, S.T, true), quali: S.settings.qMode === 'ver2' ? 2 : 1, seed: S.seed + (S.qf ? S.qf.phase : 0), grid: order, weather: S.wxNow.weather, temp: S.wxNow.temp, wear: WEARMUL[S.settings.wear] || 1, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
   resetView();
   flash(S.qf ? 'Q' + S.qf.phase : 'CLASIFICACIÓN', 1500);
 }
@@ -11009,7 +11182,7 @@ function qfSimRounds(from, pool, off) {
   const Q = S.qf, sz = qfSizes(S.entries.length);
   for (let p = from; p <= 3; p++) {
     const ents = pool.map((i) => S.entries[i]);
-    const q = SIM.qualify(S.T, ents, (S.seed + p * 7) >>> 0, { kn: knFor(ents, S.trackId, S.T), weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+    const q = SIM.qualify(S.T, ents, (S.seed + p * 7) >>> 0, { kn: knFor(ents, S.trackId, S.T, true), weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
     // la pista va mejorando de una ronda a otra (más o menos según el fin de semana; a veces el viento o el calor la empeoran)
     const er = SIM.makeRng((S.seed + 991 * p) >>> 0), evo = p === 1 ? 0 : (Q.evo = Q.evo || {})[p] ?? (Q.evo[p] = (Q.evo[p - 1] || 0) + (er() < 0.18 ? 0.05 + 0.25 * er() : -(0.06 + 0.3 * er())));
     Q.res[p] = q.map((x) => ({ idx: pool[x.idx], time: x.time < 900 ? x.time + (off || 0) + evo : null }));
@@ -11097,7 +11270,7 @@ function showQualiF1(r) {
     $('#qfSim').onclick = () => {
       // v1.15: las rondas simuladas se corrigen para casar con la que se ha corrido en pista (antes salían más lentas)
       const ents = Q.pool.map((i) => S.entries[i]);
-      const m = SIM.qualify(S.T, ents, (S.seed + ph * 7) >>> 0, { kn: knFor(ents, S.trackId, S.T), weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
+      const m = SIM.qualify(S.T, ents, (S.seed + ph * 7) >>> 0, { kn: knFor(ents, S.trackId, S.T, true), weather: S.wxNow ? S.wxNow.weather : 'seco', temp: S.wxNow ? S.wxNow.temp : undefined, equalCars: equalNow(null), setups: setupsFor(ents, S.T, S.trackId, S.settings.laps) });
       const med = (a) => { a = a.filter((t) => t && t < 900).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : 0; };
       const a = med(rows.map((x) => x.time)), b = med(m.map((x) => x.time)), off = a && b ? a - b : 0;
       qfSimRounds(ph + 1, pass.map((x) => x.idx), off);
@@ -11197,7 +11370,7 @@ function startRace(ex, pre) {
     grid = Array.from({ length: n }, (_, i) => i);
     for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [grid[i], grid[j]] = [grid[j], grid[i]]; }
   } else {
-    S.quali = SIM.qualify(S.T, S.entries, S.seed, { kn: knFor(S.entries, S.trackId, S.T), weather: useWx ? wxR.weather : 'seco', temp: useWx ? wxR.temp : undefined, tyre: useWx && wxR.weather === 'lluvia' ? 'I' : 'S', equalCars: equalNow(ex), setups: ex ? null : setupsFor(S.entries, S.T, S.trackId, S.settings.laps) });
+    S.quali = SIM.qualify(S.T, S.entries, S.seed, { kn: knFor(S.entries, S.trackId, S.T, true), weather: useWx ? wxR.weather : 'seco', temp: useWx ? wxR.temp : undefined, tyre: useWx && wxR.weather === 'lluvia' ? 'I' : 'S', equalCars: equalNow(ex), setups: ex ? null : setupsFor(S.entries, S.T, S.trackId, S.settings.laps) });
     grid = S.quali.map((x) => x.idx);
     if (S.settings.grid === 'rev') grid.reverse();
   }
@@ -11268,6 +11441,7 @@ function finishRace() {
   const res = r.results();
   if (S.exhibition && S.exhibition.type === 'eras') { showErasResults(r, res); return; }
   if (S.exhibition) { showExhibitionResults(r, res); return; }
+  schoolResume();
   // los estrategas aprenden un poco de cada carrera del campeonato
   if (S.strat && S.stratUsed) { S.strat.learn(res, S.stratUsed); S.stratUsed = null; saveStrat(); }
   const rec = {
@@ -12443,6 +12617,23 @@ function renderHud() {
 
 // ---------------- Novedades ----------------
 const CHANGELOG = [
+  { v: '1.21.1', items: ['🧵 La escuela usa hasta 12 núcleos en un ordenador (antes 6): entrena bastante más rápido. Lo aprendido va en la copia y en la nube, así que se puede entrenar en el ordenador y jugar en el móvil'] },
+  { v: '1.21', items: [
+    '🏫 La escuela, del tirón en siete etapas: ⚡ Rápido · 🧽 Limpio · 🔋 Batería · 🛞 Gomas (en qué curvas cuidarlas y cuánto apretar con las gomas frías, contando lo gastado como media parada) · 🌧 Lluvia (su propia línea y cuánto apurar en mojado) · 🚦 Salidas (hacia dónde abrirse y cómo llegar a la 1.ª curva) · ⚔ Pelea',
+    '⚔ Pelea: duelos de laboratorio curva a curva contra tres tipos de rival (flojo, normal y «muro»), con y sin DRS, todo medido en segundos (adelantar vale 1,5 s; un toque, lo que cuesta de verdad). Aprende dónde atacar, por qué lado, cuándo cruzarse y cuándo tapar el interior',
+    '🏁 Prueba en carrera al final de cada circuito: 6 carreras emparejadas con y sin lo aprendido. Si en carrera no compensa, solo se usa en clasificación',
+    '🎭 Estilo propio: sobre lo del piloto de pruebas, cada uno a su manera según sus stats y rasgos (el de «frenada» frena más tarde, el agresivo ataca más…)',
+    '🧭 Circuitos sin entrenar: con 4 o más aprendidos, usan lo de las curvas más parecidas de otros circuitos (a la mitad, por prudencia)',
+    '🗂 Entrenar por categorías: calendario, actuales, clásicos, e inventados y tuyos. Lo ya entrenado en la v1.19/1.20 se conserva y sigue por la etapa 4',
+  ] },
+  { v: '1.20.1', items: [
+    '🕰 La escuela también aprende los clásicos, los inventados y tus circuitos: el desplegable los agrupa y hay «Todos los circuitos» además de «Calendario»',
+  ] },
+  { v: '1.20', items: [
+    '👥 Escuela de pilotaje «para todos»: un piloto de pruebas aprende cada circuito desde cero y lo usan todos los pilotos (también los autogenerados y los de la cantera), cada uno según sus stats. Medido: lo que aprende uno le vale a toda la parrilla (de 0,1 a 0,4 s por vuelta a cada uno)',
+    '▶▶ «Todo el calendario»: aprende los circuitos uno detrás de otro. Si empieza una carrera se pausa y sigue sola al acabarla',
+    '👤 Sigue pudiendo entrenarse a un piloto concreto (parte de lo que sabe el de pruebas): ese sí tiene ventaja. Y «Quién lo usa»: todos o solo tu equipo',
+  ] },
   { v: '1.19', items: [
     '🏫 Escuela de pilotaje (inicio y menú): cada piloto aprende cada circuito por etapas. 1) Rápido: solo en pista, trazada, frenadas y paso por curva; un novato empieza con miedo y por el centro y en unos minutos baja de la trazada de manual. 2) Limpio: con cinco rivales, en qué curvas puede apurar con coches cerca. 3) Batería: en qué rectas gastarla',
     '🏫 Lo aprendido se usa en clasificación (a tope) y en carrera (con algo de margen); cuánto se aprovecha lo deciden sus stats (curvas rápidas, lentas, frenada, consistencia, energía). Los rivales aprenden un poco viendo al que mejor conoce cada circuito',
@@ -13435,7 +13626,7 @@ function showErasResults(r, res) {
 }
 
 window.__legDbg = { legAfterRace, legSeasonEnd, carRank, legProgress }; // para las pruebas
-window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice(), showSchool: () => showSchool(), sch: () => SCH }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
+window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice(), showSchool: () => showSchool(), sch: () => SCH, schStart: (tid, stage) => schoolStart(null, tid, stage) }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
 
 // ---- salón de la fama: las leyendas con sus récords reales, más lo que hagan en el juego ----
 function famaLegends(F) {
@@ -13901,16 +14092,57 @@ const knRound = (a) => Array.from(a, (x) => Math.round(x * 100) / 100);
 // ¿conoce ya el circuito? (los de la parrilla real conocen los circuitos reales; los demás, cuando han corrido en él)
 function knVet(d, tid) { const def = trackDef(tid); return ((d.exp || {})[tid] || 0) >= 2 || !!(def && def.real && /^f1_/.test(d.id)) || (!/^g/.test(d.id) && (d.age || 25) >= 24); }
 // lo que se usa en carrera: lo aprendido (si un veterano está reaprendiendo desde cero y aún va peor que la trazada de manual, lo de siempre)
-function knFor(entries, tid, T) {
+function knFor(entries, tid, T, quali) {
   if (!tid || !T || !entries) return null;
   const out = {}, n = SIM.knSize(T); let any = false;
+  const fix = (k) => { if (k && k.th && k.th.length !== n) { const m = SIM.knMigrate(T, k.th); if (m) k.th = m; } return k; };
+  // aún aprendiendo (va peor que con la trazada de manual) o la prueba en carrera salió mal: en carrera, lo de siempre
+  const ok = (k) => fix(k) && k.th && k.th.length === n && !k.hold && !(k.lapB && k.lapM && k.lapB > k.lapM + 0.02) && (quali || !k.raceOff);
+  // v1.20: lo del piloto de pruebas vale para todos (también los autogenerados); el que tiene entrenamiento propio usa el suyo
+  // v1.21: cada uno con su estilo; y en un circuito sin entrenar, lo aprendido en curvas parecidas de otros circuitos
+  const G0 = schoolData().tracks[tid], G = ok(G0) ? G0 : knTransfer(tid, T), M = mgrTeam(), me = S.raceMode === 'temporada' && typeof meDrv === 'function' ? meDrv() : null;
   for (const en of entries) {
     const d = en.driver, k = d && d.kn && d.kn[tid];
-    if (!k || !k.th || k.th.length !== n || k.hold) continue;
-    if (k.lapB && k.lapM && k.lapB > k.lapM + 0.02) continue; // aún aprendiendo (va peor que con la de manual): en carrera, lo de siempre
-    out[d.id] = { th: k.th }; any = true;
+    if (ok(k)) { out[d.id] = { th: k.th }; any = true; continue; }
+    if (G && d && (S.school.who !== 'equipo' || (M ? en.team && en.team.id === M : me && me.id === d.id))) { out[d.id] = { th: knStyle(d, G.th, T) }; any = true; }
   }
   return any ? out : null;
+}
+// v1.21: estilo propio: sobre lo del piloto de pruebas, cada uno a su manera (según stats y rasgos y un toque personal fijo)
+function knStyle(d, th, T) {
+  const C = SIM.KN_C, nc = T.corners.length, st = d.stats || {}, o = th.slice();
+  let h = 0; for (const ch of String(d.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = () => ((h = (h * 1103515245 + 12345) >>> 0) / 4294967296 - 0.5);
+  const ag = ((st.agresividad ?? 60) - 60) / 40, br = ((st.frenada ?? 80) - 80) / 20 + (d.rasgos && d.rasgos.includes('frenada') ? 0.4 : 0);
+  for (let j = 0; j < nc; j++) {
+    o[j * C] += 0.08 * ag + 0.12 * rnd(); // paso por curva
+    o[j * C + 1] += 0.1 * br + 0.12 * rnd(); // frenada
+    o[j * C + 2] += 0.1 * rnd(); // trazada
+    o[j * C + 7] += 0.35 * ag + 0.15 * rnd(); // ganas de atacar
+    o[j * C + 10] += 0.25 * (((st.defender ?? 80) - 80) / 20) + 0.15 * rnd(); // tapar el interior
+  }
+  return o;
+}
+// v1.21: circuito sin entrenar: lo aprendido en las curvas más parecidas (velocidad en el vértice, frenada, recta de antes)
+// de los circuitos ya aprendidos, a la mitad (medido: en circuitos nuevos da entre una y dos décimas, un tercio o la mitad
+// de lo que da entrenarlo). Hace falta haber aprendido al menos 4 circuitos
+const knTrCache = {};
+function knTransfer(tid, T) {
+  const D = schoolData(), lib = Object.entries(D.tracks).filter(([t, k]) => t !== tid && k && k.feat && k.th && (k.st || 0) >= 1 && !k.raceOff && k.lapB && k.lapM && k.lapB <= k.lapM);
+  if (lib.length < 4) return null;
+  const key = tid + '|' + lib.map(([t, k]) => t + k.g).join(',');
+  if (knTrCache[tid] && knTrCache[tid].key === key) return knTrCache[tid].k;
+  const C = SIM.KN_C, pool = [], sc = [20, 15, 150];
+  for (const [t, k] of lib) { const def = trackDef(t); if (!def) continue; const nc = k.feat.length, th = k.th.length === nc * (C + 2) + SIM.KN_G ? k.th : null; if (!th) continue; k.feat.forEach((f, j) => pool.push({ f, p: th.slice(j * C, j * C + C) })); }
+  if (pool.length < 20) return null;
+  const feat = SCHOOL.cornerFeat(T), th = new Array(SIM.knSize(T)).fill(0);
+  feat.forEach((f, j) => {
+    const near = pool.map((x) => ({ x, d: Math.hypot((x.f[0] - f[0]) / sc[0], (x.f[1] - f[1]) / sc[1], (x.f[2] - f[2]) / sc[2]) })).sort((a, b) => a.d - b.d).slice(0, 4);
+    for (let i = 0; i < C; i++) th[j * C + i] = 0.5 * near.reduce((a, y) => a + y.x.p[i], 0) / near.length;
+  });
+  const k = { th, transfer: true };
+  knTrCache[tid] = { key, k };
+  return k;
 }
 function knAllDrivers() { const a = DATA.DRIVERS.slice(); try { if (S.champ && S.champ.season) a.push(...acad()); } catch (e) { /* sin temporada */ } return a; }
 // después de cada carrera: experiencia en el circuito y aprender viendo al que mejor lo conoce
@@ -13933,6 +14165,16 @@ function knAfterRace(r, rec) {
   }
   if (changed) saveRoster();
 }
+function schoolData() { if (!S.school || !S.school.tracks) S.school = { v: 1, who: 'todos', tracks: {} }; return S.school; }
+// el piloto de pruebas: stats de un buen piloto medio de la parrilla, en un coche de la zona media
+function schGeneric() {
+  const st = {}; for (const k of ['rapidas', 'lentas', 'frenada', 'consistencia', 'agresividad', 'adelantar', 'defender', 'lluvia', 'presion', 'companerismo', 'energia', 'ritmo', 'salidas']) st[k] = 85;
+  st.agresividad = 60; st.sucio = 25;
+  const d = { id: 'escuela_pruebas', name: 'Piloto de pruebas', short: 'PRU', age: 26, nat: 'ES', rasgos: [], num: 99, team: null, stats: st };
+  try { DATA.syncStats && DATA.syncStats(d); } catch (e) { /* nada */ }
+  return d;
+}
+function schGenericTeam() { const ts = DATA.TEAMS.slice().sort((a, b) => teamStrength(a) - teamStrength(b)); return ts[Math.floor(ts.length / 2)] || DATA.TEAMS[0]; }
 // ---- hilos ----
 function schoolPool() {
   if (SCH.pool.length || SCH.noWk) return SCH.pool;
@@ -13941,7 +14183,7 @@ function schoolPool() {
       + '\n;self.onmessage=(e)=>{const j=e.data;let r;try{r=SCHOOL.evaluate(j);}catch(err){r={f:1e9,lap:0,err:String(err)};}self.postMessage({id:j.id,r});};';
     const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
     const want = S.settings.schoolCores || 0, hc = navigator.hardwareConcurrency || 4;
-    const n = Math.max(1, Math.min(6, want || hc - 1));
+    const n = Math.max(1, Math.min(want ? 16 : 12, want || hc - 1)); // v1.21.1: en un ordenador con muchos núcleos, hasta 12 (antes 6)
     for (let i = 0; i < n; i++) { const w = new Worker(url); w.onmessage = schoolMsg; w.onerror = (e) => { console.warn('escuela', e.message || e); w.busy = false; }; w.busy = false; SCH.pool.push(w); }
   } catch (e) { SCH.noWk = true; }
   return SCH.pool;
@@ -13961,28 +14203,44 @@ function schoolMsg(e) { const w = e.target; w.busy = false; const cb = SCH.cb[e.
 const schTeamOf = (d) => teamById(d.team) || (mgrTeam() && teamById(mgrTeam())) || DATA.TEAMS[0];
 const schClone = (d) => { const c = JSON.parse(JSON.stringify(d)); delete c.kn; delete c.exp; return c; };
 function schJob(R, stage, th, seed) { return { trackKey: R.tid, trackDef: trackDef(R.tid), entry: R.entry, rivals: R.rivals, th: Array.from(th), stage, seed }; }
+// cada etapa se valida siempre con las mismas pruebas (misma suerte), para comparar versiones
+const SCH_SEEDS = { limpio: [101, 202, 303, 404], pelea: [3, 4, 5, 6, 7, 8], salidas: [11, 12, 13, 14] };
 async function schVal(R, stage, th) {
-  const seeds = stage === 'limpio' ? [101, 202, 303, 404] : [101, 202];
+  const seeds = SCH_SEEDS[stage] || [101, 202];
   const rs = await Promise.all(seeds.map((sd) => schoolJob(schJob(R, stage, th, sd))));
   const k = rs.length, sum = (f) => rs.reduce((a, r) => a + (f(r) || 0), 0);
-  return { f: sum((r) => r.f) / k, lap: sum((r) => r.lap) / k, offs: sum((r) => r.offs), ct: sum((r) => r.ct), time: sum((r) => r.time) / k, n: k };
+  return { f: sum((r) => r.f) / k, lap: sum((r) => r.lap) / k, offs: sum((r) => r.offs), ct: sum((r) => r.ct), time: sum((r) => r.time) / k, n: k,
+    wear: sum((r) => r.wear) / k, cost: sum((r) => r.cost) / k, gain: sum((r) => r.gain) / k, passA: sum((r) => r.passA), keepD: sum((r) => r.keepD), nd: sum((r) => r.n) };
+}
+// v1.21: prueba en carrera: carreras emparejadas (la misma suerte) con y sin lo aprendido, contra rivales que no lo usan
+async function schRaceTest(R) {
+  const n = SIM.knSize(R.T), zero = new Array(n).fill(0), seeds = [501, 502, 503, 504, 505, 506];
+  const jobs = []; for (const sd of seeds) for (const th of [R.k.th, zero]) jobs.push(schoolJob(Object.assign(schJob(R, 'prueba', th, sd))));
+  const rs = await Promise.all(jobs);
+  const W = rs.filter((_, i) => i % 2 === 0), Z = rs.filter((_, i) => i % 2 === 1), av = (a, f) => a.reduce((x, r) => x + (f(r) || 0), 0) / a.length;
+  return { posW: av(W, (r) => r.pos), posZ: av(Z, (r) => r.pos), ctW: av(W, (r) => r.ct), ctZ: av(Z, (r) => r.ct), offW: av(W, (r) => r.offs), offZ: av(Z, (r) => r.offs), n: W.length };
 }
 function schRec(d, tid, T) {
   d.kn = d.kn || {};
   const n = SIM.knSize(T);
   let k = d.kn[tid];
-  if (!k || !k.th || k.th.length !== n) { const vet = knVet(d, tid); k = d.kn[tid] = { th: vet ? new Array(n).fill(0) : knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet, hist: [] }; }
+  if (k && k.th && k.th.length !== n) { const m = SIM.knMigrate(T, k.th); if (m) k.th = m; } // lo de versiones anteriores, al formato nuevo
+  if (!k || !k.th || k.th.length !== n) {
+    const vet = knVet(d, tid), G = schoolData().tracks[tid], gOk = G && G.th && G.th.length === n && G.lapB && G.lapM && G.lapB <= G.lapM + 0.02;
+    k = d.kn[tid] = { th: gOk ? G.th.slice() : vet ? new Array(n).fill(0) : knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: vet || gOk, hist: [], fromGen: !!gOk };
+  }
   return k;
 }
-async function schoolStart(d, tid, stage) {
+async function schoolStart(d, tid, stage, queue) {
   schoolStop(true);
+  const gen = !d; if (gen) d = schGeneric();
   const T = knT(tid); if (!T || !d) return;
-  const k = schRec(d, tid, T); k.school = true;
-  const tm = schTeamOf(d), entry = { driver: schClone(d), team: JSON.parse(JSON.stringify(tm)) };
+  const k = gen ? schGenRec(tid, T) : schRec(d, tid, T); k.school = true;
+  const tm = gen ? schGenericTeam() : schTeamOf(d), entry = { driver: schClone(d), team: JSON.parse(JSON.stringify(tm)) };
   const ov = DATA.overall(d.stats);
-  const rivals = DATA.DRIVERS.filter((x) => x.id !== d.id).sort((a, b) => Math.abs(DATA.overall(a.stats) - ov) - Math.abs(DATA.overall(b.stats) - ov)).slice(0, 5).map((x) => ({ driver: schClone(x), team: JSON.parse(JSON.stringify(tm)) }));
+  const rivals = DATA.DRIVERS.filter((x) => x.id !== d.id).sort((a, b) => Math.abs(DATA.overall(a.stats) - ov) - Math.abs(DATA.overall(b.stats) - ov)).slice(0, 9).map((x) => ({ driver: schClone(x), team: JSON.parse(JSON.stringify(tm)) }));
   let seed = 1; const rng = () => ((seed = (seed * 1103515245 + 12345 + (Date.now() & 7)) & 0x7fffffff) / 0x7fffffff);
-  const R = { d, tid, T, k, entry, rivals, on: true, stage: stage ?? Math.min(2, k.st || 0), seedN: 1000 + (k.g || 0) * 40, rng, sg: 0, stall: 0, t0: performance.now() };
+  const R = { d, gen, queue: queue || null, tid, T, k, entry, rivals, on: true, stage: stage ?? Math.min(SCH_LAST(), k.st || 0), seedN: 1000 + (k.g || 0) * 40, rng, sg: 0, stall: 0, t0: performance.now() };
   SCH.run = R; R.msg = 'Preparando…'; renderSchool();
   // referencias: la trazada de manual y por dónde empieza
   if (!k.lapM) { const m = await schVal(R, 'rapido', new Array(SIM.knSize(T)).fill(0)); if (SCH.run !== R) return; k.lapM = +m.lap.toFixed(3); }
@@ -13996,10 +14254,45 @@ function schoolStop(silent) {
   knSave(R);
   if (!silent && schoolOpen()) renderSchool();
 }
-function schoolPause(why) { if (SCH.run) { schoolStop(true); flash('ESCUELA EN PAUSA: ' + String(why).toUpperCase(), 1400); } }
-function knSave(R) { try { saveRoster(); if (R && acad().includes(R.d)) saveAll(); } catch (e) { saveRoster(); } }
+function schoolPause(why) {
+  const R = SCH.run; if (!R) return;
+  S.schResume = { gen: R.gen, d: R.gen ? null : R.d, tid: R.tid, stage: R.stage, queue: R.queue ? R.queue.slice() : null }; // se reanuda al acabar la carrera
+  schoolStop(true); flash('ESCUELA EN PAUSA: ' + String(why).toUpperCase(), 1400);
+}
+function schoolResume() { const z = S.schResume; S.schResume = null; if (!z || SCH.run) return; setTimeout(() => { if (!SCH.run && (!S.race || S.placeholder || S.race.phase === 'done')) { schoolStart(z.d, z.tid, z.stage, z.queue); flash('🏫 LA ESCUELA SIGUE ENTRENANDO', 1400); } }, 1500); }
+function knSave(R) { if (R && R.gen) { Store.save('escuela.json', schoolData()); return; } try { saveRoster(); if (R && acad().includes(R.d)) saveAll(); } catch (e) { saveRoster(); } }
+// lo del piloto de pruebas en un circuito (empieza de cero, como un novato)
+function schGenRec(tid, T) {
+  const D = schoolData(), n = SIM.knSize(T); let k = D.tracks[tid];
+  if (k && k.th && k.th.length !== n) { const m = SIM.knMigrate(T, k.th); if (m) k.th = m; }
+  if (!k || !k.th || k.th.length !== n) k = D.tracks[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: false, hist: [] };
+  return k;
+}
+const SCH_LAST = () => SCHOOL.STAGES.length - 1;
+function schStageStart(k, id, v) {
+  k.m = k.m || {};
+  if (!k.m[id]) k.m[id] = {};
+  const m = k.m[id];
+  if (m.v0 === undefined) m.v0 = schMetric(id, v);
+  if (m.v === undefined) m.v = m.v0;
+  if (id === 'lluvia' && !k.wetM) k.wetM = null; // (la vuelta en mojado con la trazada de manual se calcula aparte)
+}
+function schStageBest(k, id, v) { k.m = k.m || {}; (k.m[id] = k.m[id] || {}).v = schMetric(id, v); }
+// lo que se enseña de cada etapa (en segundos siempre que se puede)
+function schMetric(id, v) {
+  if (id === 'limpio') return { inc: +((v.offs + v.ct) / (v.n || 1)).toFixed(2), f: +v.f.toFixed(2) };
+  if (id === 'bateria') return { t: +v.time.toFixed(2) };
+  if (id === 'gomas') return { cost: +v.cost.toFixed(2), wear: +v.wear.toFixed(3) };
+  if (id === 'lluvia') return { lap: +v.lap.toFixed(3) };
+  if (id === 'salidas') return { t: +v.time.toFixed(2), gain: +v.gain.toFixed(2) };
+  if (id === 'pelea') return { f: +v.f.toFixed(2), pa: +(100 * v.passA / Math.max(1, v.nd)).toFixed(0), kd: +(100 * v.keepD / Math.max(1, v.nd)).toFixed(0), ct: +(100 * v.ct / Math.max(1, 2 * v.nd)).toFixed(1) };
+  return { lap: +v.lap.toFixed(3) };
+}
 async function schoolLoop(R) {
-  const startStage = async () => { R.S = { th: R.k.th.slice(), m: {}, v: {}, t: 0 }; R.sg = 0; R.stall = 0; R.best = await schVal(R, SCHOOL.STAGES[R.stage].id, R.S.th); R.bestTh = R.S.th.slice(); };
+  const startStage = async () => {
+    R.S = { th: R.k.th.slice(), m: {}, v: {}, t: 0 }; R.sg = 0; R.stall = 0; R.best = await schVal(R, SCHOOL.STAGES[R.stage].id, R.S.th); R.bestTh = R.S.th.slice();
+    schStageStart(R.k, SCHOOL.STAGES[R.stage].id, R.best);
+  };
   await startStage(); if (SCH.run !== R) return;
   while (SCH.run === R && R.on) {
     const st = SCHOOL.STAGES[R.stage], idx = SCHOOL.maskIdx(R.T, st.mask), eps = SCHOOL.esPlan(st, idx, R.rng);
@@ -14009,48 +14302,64 @@ async function schoolLoop(R) {
     for (let p = 0; p < eps.length; p++) { const sd = R.seedN++; for (const sg of [1, -1]) { const th = R.S.th.slice(); idx.forEach((i, k) => (th[i] += sg * st.sigma * eps[p][k])); jobs.push(schoolJob(schJob(R, st.id, th, sd))); } }
     const res = await Promise.all(jobs);
     if (SCH.run !== R) return;
-    if (st.id === 'rapido' && res.every((x) => x && x.seg && x.seg.length === R.T.corners.length)) SCHOOL.esUpdateSeg(R.S, st, idx, eps, res, SIM.KN_C);
-    else SCHOOL.esUpdate(R.S, st, idx, eps, res.map((x) => x.f));
+    SCHOOL.esStep(R.S, st, idx, eps, res.map((x) => ({ f: x.f, sc: x.sc && x.sc.length === R.T.corners.length ? x.sc : null })), SIM.KN_C); // cada curva con su propia nota
     const v = await schVal(R, st.id, R.S.th);
     if (SCH.run !== R) return;
     R.sg++; const k = R.k; k.g = (k.g || 0) + 1;
     (k.hist = k.hist || []).push([k.g, R.stage, +v.f.toFixed(2), +v.lap.toFixed(3), v.offs || 0, v.ct || 0]);
     if (k.hist.length > 90) k.hist.splice(0, k.hist.length - 90);
-    const margin = st.id === 'limpio' ? 0.4 : 0.015;
+    const margin = { limpio: 0.4, pelea: 0.5, salidas: 0.15, gomas: 0.3 }[st.id] ?? 0.015; // lo que puede ser suerte
     if (v.f < R.best.f - margin) {
       R.best = v; R.bestTh = R.S.th.slice(); R.stall = 0;
       k.th = knRound(R.bestTh);
       if (st.id === 'rapido') { k.lapB = +v.lap.toFixed(3); if (k.hold && k.lapB <= k.lapM + 0.02) k.hold = false; }
-      if (st.id === 'limpio') k.inc = +((v.offs + v.ct) / v.n).toFixed(2);
-      if (st.id === 'bateria') k.tanda = +v.time.toFixed(2);
+      schStageBest(k, st.id, v);
     } else R.stall++;
-    if (st.id === 'limpio' && k.inc0 === undefined) k.inc0 = +(((R.best.offs || 0) + (R.best.ct || 0)) / (R.best.n || 1)).toFixed(2);
-    if (st.id === 'bateria' && k.tanda0 === undefined) k.tanda0 = +R.best.time.toFixed(2);
     if (k.g % 3 === 0) knSave(R);
     if (R.stall >= st.stall || R.sg >= st.maxG) {
       k.st = Math.max(k.st || 0, R.stage + 1); knSave(R);
-      if (R.stage < 2) { R.stage++; flash(`${SCHOOL.STAGES[R.stage - 1].ic} ETAPA ${R.stage} TERMINADA · AHORA: ${SCHOOL.STAGES[R.stage].name.toUpperCase()}`, 1800); await startStage(); if (SCH.run !== R) return; }
-      else { R.on = false; SCH.run = null; k.school = false; flash('🏫 ESCUELA TERMINADA EN ESTE CIRCUITO', 1800); if (schoolOpen()) renderSchool(); return; }
+      if (R.stage < SCH_LAST()) { R.stage++; flash(`${SCHOOL.STAGES[R.stage - 1].ic} ETAPA ${R.stage} TERMINADA · AHORA: ${SCHOOL.STAGES[R.stage].name.toUpperCase()}`, 1800); await startStage(); if (SCH.run !== R) return; }
+      else {
+        // prueba en carrera: solo se queda para carrera si no pierde puestos frente a no usarlo (la clasificación siempre lo usa)
+        R.msg = 'Prueba en carrera: 6 carreras con y sin lo aprendido'; if (schoolOpen()) renderSchool(true);
+        const pr = await schRaceTest(R); if (SCH.run !== R) return;
+        k.prueba = { posW: +pr.posW.toFixed(2), posZ: +pr.posZ.toFixed(2), ctW: +pr.ctW.toFixed(2), ctZ: +pr.ctZ.toFixed(2), offW: +pr.offW.toFixed(2), offZ: +pr.offZ.toFixed(2), n: pr.n };
+        k.raceOff = pr.posW > pr.posZ + 0.4; k.feat = SCHOOL.cornerFeat(R.T); knSave(R);
+        R.on = false; SCH.run = null; k.school = false;
+        if (R.queue && R.queue.length) { const nx = R.queue.shift(); flash(`🏫 ${R.T.name.toUpperCase()} APRENDIDO · AHORA: ${(trackDef(nx) || {}).name || nx}`.toUpperCase(), 1800); if (R.gen) S.schTrk = nx; schoolStart(R.gen ? null : R.d, nx, 0, R.queue); return; }
+        flash('🏫 ESCUELA TERMINADA EN ESTE CIRCUITO', 1800); if (schoolOpen()) renderSchool(); return;
+      }
     }
     if (schoolOpen()) renderSchool();
   }
 }
 // ---- pantalla ----
 const schoolOpen = () => !$('#modal').classList.contains('hidden') && !!$('#mbox #scBox');
-function schoolTileTxt() { const R = SCH.run; return R ? `${esc(R.d.short || R.d.name)} · etapa ${R.stage + 1}` : 'Rápidos, limpios y con la batería'; }
+function schoolTileTxt() { const R = SCH.run; if (R) return `${R.gen ? 'Piloto de pruebas' : esc(R.d.short || R.d.name)} · etapa ${R.stage + 1}`; const D = schoolData(), n = Object.values(D.tracks).filter((k) => (k.st || 0) >= 1).length; return n ? `${n} circuito${n > 1 ? 's' : ''} aprendido${n > 1 ? 's' : ''}` : 'Que aprendan cada circuito'; }
 function schDriverList() {
   const M = mgrTeam(), me = S.raceMode === 'temporada' && meDrv ? meDrv() : null;
   let list = M ? DATA.DRIVERS.filter((d) => d.team === M) : me ? [me] : DATA.DRIVERS.slice();
   try { if (M && S.champ.season) list = list.concat(acad()); } catch (e) { /* sin cantera */ }
   return list.filter(Boolean);
 }
-function schTrackList() {
+// v1.20: todos los circuitos (el calendario primero, luego los clásicos, los inventados y los tuyos)
+function schCalendar() {
   let ids = [];
   try { const ss = S.champ && S.champ.season; if (ss && ss.calendar) ids = ss.calendar.map((x) => (typeof x === 'string' ? x : x.id || x.track)).filter(Boolean); } catch (e) { /* nada */ }
-  if (!ids.length) ids = Object.keys(DATA.TRACKS);
+  if (!ids.length) ids = Object.values(DATA.TRACKS).filter((t) => t.real && t.era !== 'clasico').map((t) => t.id);
   let next = null; try { if (seasonOn()) next = seasonTrack(); } catch (e) { /* sin temporada */ }
-  ids = [...new Set([next || S.trackId, ...ids].filter((id) => id && trackDef(id)))]; // primero, el de la próxima carrera
-  return ids;
+  return [...new Set([next || S.trackId, ...ids].filter((id) => id && trackDef(id)))]; // primero, el de la próxima carrera
+}
+function schTrackList() {
+  const cal = schCalendar(), all = Object.values(DATA.TRACKS).map((t) => t.id).concat((S.customTracks || []).map((t) => t.id));
+  return [...new Set([...cal, ...all].filter((id) => trackDef(id)))];
+}
+function schTrackOpts(sel) {
+  const cal = new Set(schCalendar()), grp = { cal: [], clasicos: [], actuales: [], inventados: [], mios: [] };
+  for (const t of schTrackList()) { const d = trackDef(t); grp[cal.has(t) ? 'cal' : trackBlock(d)].push(t); }
+  const lbl = { cal: S.champ && S.champ.season ? '🏁 Tu calendario' : '🏁 Calendario actual', actuales: '🏁 Otros actuales', clasicos: '🕰 Clásicos', inventados: '🌍 Inventados', mios: '✏ Tus circuitos' };
+  const D = schoolData();
+  return Object.entries(grp).filter(([, a]) => a.length).map(([k, a]) => `<optgroup label="${lbl[k]}">${a.map((t) => `<option value="${t}" ${t === sel ? 'selected' : ''}>${esc(trackDef(t).name)}${(D.tracks[t] && D.tracks[t].st) ? ' ✓' : ''}</option>`).join('')}</optgroup>`).join('');
 }
 const fmtS = (x) => (x >= 60 ? Math.floor(x / 60) + ':' + (x % 60).toFixed(2).padStart(5, '0') : x.toFixed(2)).replace('.', ',');
 const dS = (x) => (x > 0 ? '+' : x < 0 ? '−' : '±') + Math.abs(x).toFixed(2).replace('.', ',') + ' s';
@@ -14067,67 +14376,111 @@ function schMapSVG(T, th, apt) {
 }
 function schChartSVG(k, stage) {
   const h = (k.hist || []).filter((x) => x[1] === stage); if (h.length < 2) return '<div class="muted sc-empty">La gráfica aparece al terminar las primeras generaciones.</div>';
-  const val = (x) => (stage === 0 ? x[3] : stage === 1 ? x[4] + x[5] : x[2]);
-  const ys = h.map(val), ref = stage === 0 && k.lapM ? k.lapM : null;
+  const val = (x) => (stage === 0 || stage === 4 ? x[3] : stage === 1 ? x[4] + x[5] : x[2]);
+  const ys = h.map(val), ref = stage === 0 && k.lapM ? k.lapM : null, sec = stage !== 1;
   let lo = Math.min(...ys, ref ?? 1e9), hi = Math.max(...ys, ref ?? -1e9); if (hi - lo < 0.2) { hi += 0.1; lo -= 0.1; }
   const W = 320, Hh = 110, X = (i) => 8 + (i / (h.length - 1)) * (W - 16), Y = (y) => 8 + (1 - (y - lo) / (hi - lo)) * (Hh - 16);
   const pts = h.map((x, i) => `${X(i).toFixed(1)},${Y(val(x)).toFixed(1)}`).join(' ');
   return `<svg class="sc-chart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" aria-label="Evolución por generación">
     ${ref ? `<line x1="0" x2="${W}" y1="${Y(ref).toFixed(1)}" y2="${Y(ref).toFixed(1)}" stroke="#8f98a8" stroke-dasharray="4 4"/><text x="${W - 4}" y="${(Y(ref) - 4).toFixed(1)}" text-anchor="end" class="sc-ax">manual ${fmtS(ref)}</text>` : ''}
     <polyline points="${pts}" fill="none" stroke="#ff2e88" stroke-width="2.2" stroke-linejoin="round"/>
-    <text x="${W - 4}" y="12" text-anchor="end" class="sc-ax">${stage === 0 ? fmtS(hi) : stage === 1 ? hi.toFixed(0) + ' incid.' : fmtS(hi)}</text><text x="${W - 4}" y="${Hh - 4}" text-anchor="end" class="sc-ax">${stage === 0 ? fmtS(lo) : stage === 1 ? lo.toFixed(0) + ' incid.' : fmtS(lo)}</text><text x="4" y="12" class="sc-ax">${['vuelta lanzada', 'salidas y toques', 'dos vueltas de carrera'][stage]}</text></svg>`;
+    <text x="${W - 4}" y="12" text-anchor="end" class="sc-ax">${sec ? fmtS(hi) : hi.toFixed(0) + ' incid.'}</text><text x="${W - 4}" y="${Hh - 4}" text-anchor="end" class="sc-ax">${sec ? fmtS(lo) : lo.toFixed(0) + ' incid.'}</text><text x="4" y="12" class="sc-ax">${['vuelta lanzada', 'salidas y toques', 'dos vueltas de carrera', 'tanda, con lo gastado en gomas', 'vuelta en mojado', 'hasta la 3.ª curva', 'duelos (s)'][stage] || ''}</text></svg>`;
+}
+// lo que ha dado cada etapa: antes y ahora (con las mismas pruebas)
+function schStageTable(k) {
+  const m = k.m || {}, rows = [], c = (x) => String(x).replace('.', ',');
+  const add = (id, txt) => { const st = SCHOOL.STAGES.find((x) => x.id === id); if (st && txt) rows.push(`<tr><td>${st.ic} ${st.name}</td><td>${txt}</td></tr>`); };
+  if (k.inc !== undefined && !m.limpio) m.limpio = { v0: { inc: k.inc0 ?? k.inc }, v: { inc: k.inc } }; // (de la v1.19/1.20)
+  if (k.tanda !== undefined && !m.bateria) m.bateria = { v0: { t: k.tanda0 ?? k.tanda }, v: { t: k.tanda } };
+  const M = (id) => m[id] && m[id].v0 && m[id].v ? m[id] : null;
+  if (M('limpio')) add('limpio', `${c(M('limpio').v0.inc)} → <b>${c(M('limpio').v.inc)}</b> salidas y toques por carrera con tráfico`);
+  if (M('bateria')) add('bateria', `<b>${dS(M('bateria').v.t - M('bateria').v0.t)}</b> en dos vueltas de carrera`);
+  if (M('gomas')) add('gomas', `<b>${dS(M('gomas').v.cost - M('gomas').v0.cost)}</b> en una tanda contando lo gastado (gomas al ${Math.round(100 * M('gomas').v.wear)} %, antes ${Math.round(100 * M('gomas').v0.wear)} %)`);
+  if (M('lluvia')) add('lluvia', `vuelta en mojado ${fmtS(M('lluvia').v0.lap)} → <b>${fmtS(M('lluvia').v.lap)}</b> (${dS(M('lluvia').v.lap - M('lluvia').v0.lap)})`);
+  if (M('salidas')) add('salidas', `<b>${dS(M('salidas').v.t - M('salidas').v0.t)}</b> hasta la 3.ª curva · ${M('salidas').v.gain >= 0 ? '+' : ''}${c(M('salidas').v.gain)} puestos de media`);
+  if (M('pelea')) add('pelea', `adelanta el <b>${M('pelea').v.pa} %</b> (antes ${M('pelea').v0.pa} %) · aguanta el <b>${M('pelea').v.kd} %</b> (antes ${M('pelea').v0.kd} %) · ${c(M('pelea').v.ct)} toques por 100 duelos · ${dS(M('pelea').v.f - M('pelea').v0.f)}`);
+  if (k.prueba) { const p = k.prueba; rows.push(`<tr><td>🏁 Prueba en carrera</td><td>puesto medio <b>${c(p.posW)}</b> con lo aprendido y ${c(p.posZ)} sin él (sale 5.º de 10, ${p.n} carreras) · toques ${c(p.ctW)} / ${c(p.ctZ)}${k.raceOff ? ' · <b class="dn">en carrera no compensa: solo se usa en clasificación</b>' : ''}</td></tr>`); }
+  return rows.length ? `<table class="sc-tab sc-res">${rows.join('')}</table>` : '';
 }
 function showSchool() {
-  S.schDrv = S.schDrv && schDriverList().some((d) => d.id === S.schDrv) ? S.schDrv : (SCH.run ? SCH.run.d.id : (schDriverList()[0] || {}).id);
-  S.schTrk = S.schTrk && trackDef(S.schTrk) ? S.schTrk : SCH.run ? SCH.run.tid : schTrackList()[0];
+  S.schMode = S.schMode || 'gen';
+  if (SCH.run) S.schMode = SCH.run.gen ? 'gen' : 'drv';
+  S.schDrv = S.schDrv && schDriverList().some((d) => d.id === S.schDrv) ? S.schDrv : (SCH.run && !SCH.run.gen ? SCH.run.d.id : (schDriverList()[0] || {}).id);
+  S.schTrk = SCH.run ? SCH.run.tid : S.schTrk && trackDef(S.schTrk) ? S.schTrk : schTrackList()[0];
   modal('<div id="scBox"></div>'); $('#mbox').classList.add('pw-screen');
   renderSchool();
 }
+const knOk = (k, n) => k && k.th && k.th.length === n && k.lapB && k.lapM && k.lapB <= k.lapM + 0.02;
 function renderSchool(light) {
   const box = $('#mbox #scBox'); if (!box) return;
-  const drivers = schDriverList(), d = drivers.find((x) => x.id === S.schDrv) || drivers[0];
-  const tid = S.schTrk, T = knT(tid), R = SCH.run, mine = R && d && R.d === d && R.tid === tid;
+  const gen = S.schMode !== 'drv', drivers = schDriverList();
+  const d = gen ? schGeneric() : drivers.find((x) => x.id === S.schDrv) || drivers[0];
+  const tid = S.schTrk, T = knT(tid), R = SCH.run, mine = R && R.tid === tid && (gen ? R.gen : !R.gen && R.d === d);
   if (light && box._ok) { const st = $('#scStatus'); if (st && R) st.textContent = R.msg || ''; return; }
   box._ok = true;
   if (!d || !T) { box.innerHTML = '<div class="pw-top"><button class="back" id="scBack">‹</button><h1>Escuela de pilotaje</h1></div><div class="pw-body"><div class="note">No hay pilotos o circuitos para entrenar.</div></div>'; $('#scBack').onclick = () => closeModal(); return; }
-  const n = SIM.knSize(T), kOld = d.kn && d.kn[tid], k = kOld && kOld.th && kOld.th.length === n ? kOld : null, vet = knVet(d, tid);
+  const n = SIM.knSize(T), D = schoolData(), G = D.tracks[tid];
+  const kOld = gen ? G : d.kn && d.kn[tid], k = kOld && kOld.th && kOld.th.length === n ? kOld : null, vet = !gen && knVet(d, tid);
   const apt = SIM.knApt(d.stats), pc = (x) => Math.round(x * 100) + ' %';
   const done = k ? k.st || 0 : 0, cur = mine ? R.stage : Math.min(2, done), chartSt = mine ? R.stage : 0;
   const stages = SCHOOL.STAGES.map((st, i) => `<button class="sc-st ${i < done ? 'ok' : ''} ${i === cur ? 'cur' : ''}" data-scst="${i}" ${i > done ? 'disabled' : ''}><span class="n">${i + 1}</span><b>${st.ic} ${st.name}</b><small>${st.what}</small>${i < done ? '<em>✓ hecha</em>' : i === cur && mine ? '<em>entrenando…</em>' : ''}</button>`).join('');
   let nums = '';
   if (k && k.lapM) {
     const lb = k.lapB || k.lap0 || k.lapM;
-    nums = `<div class="sc-nums"><div><b>${fmtS(lb)}</b><span>vuelta lanzada${k.lap0 && Math.abs(k.lap0 - lb) > 0.01 ? ` (empezó en ${fmtS(k.lap0)})` : ''}</span></div><div><b class="${lb < k.lapM - 0.005 ? 'up' : lb > k.lapM + 0.005 ? 'dn' : ''}">${dS(lb - k.lapM)}</b><span>frente a la trazada de manual (${fmtS(k.lapM)})</span></div>${k.inc !== undefined ? `<div><b>${String(k.inc).replace('.', ',')}</b><span>salidas y toques por carrera con tráfico${k.inc0 !== undefined ? ` (antes ${String(k.inc0).replace('.', ',')})` : ''}</span></div>` : ''}${k.tanda !== undefined ? `<div><b>${dS(k.tanda - (k.tanda0 ?? k.tanda))}</b><span>en dos vueltas de carrera gastando la batería donde ha aprendido</span></div>` : ''}</div>`;
+    nums = `<div class="sc-nums"><div><b>${fmtS(lb)}</b><span>vuelta lanzada${k.lap0 && Math.abs(k.lap0 - lb) > 0.01 ? ` (empezó en ${fmtS(k.lap0)})` : ''}</span></div><div><b class="${lb < k.lapM - 0.005 ? 'up' : lb > k.lapM + 0.005 ? 'dn' : ''}">${dS(lb - k.lapM)}</b><span>frente a la trazada de manual (${fmtS(k.lapM)})${lb > k.lapM + 0.02 ? ' · hasta mejorarla, en carrera se usa la de manual' : ''}</span></div></div>${schStageTable(k)}`;
   }
-  const status = mine ? `<div class="sc-status"><i class="dot live"></i><span id="scStatus">${esc(R.msg || '')}</span></div>` : R ? `<div class="note">Entrenando a ${esc(R.d.name)} en ${esc(trackDef(R.tid).name)}. Solo se entrena a uno a la vez.</div>` : '';
-  const known = Object.entries(d.kn || {}).filter(([t, x]) => trackDef(t) && x && x.th).map(([t, x]) => `<tr><td>${esc(trackDef(t).name)}</td><td>${'✓'.repeat(x.st || 0) || (x.watched ? '👀' : '—')}</td><td>${x.lapM && x.lapB ? dS(x.lapB - x.lapM) : x.watched ? 'visto en carrera' : ''}</td></tr>`).join('');
+  const status = mine ? `<div class="sc-status"><i class="dot live"></i><span id="scStatus">${esc(R.msg || '')}</span>${R.queue && R.queue.length ? `<span class="muted"> · quedan ${R.queue.length} circuitos</span>` : ''}</div>`
+    : R ? `<div class="note">Entrenando ${R.gen ? 'al piloto de pruebas' : 'a ' + esc(R.d.name)} en ${esc(trackDef(R.tid).name)}. Solo se entrena uno a la vez.</div>` : '';
+  const tracks = schTrackList(), M = mgrTeam();
+  const row = (t, x) => `<tr data-sctrk="${t}"><td>${esc(trackDef(t).name)}</td><td>${x && x.st ? `${x.st}/${SCHOOL.STAGES.length}${x.prueba ? ' 🏁' : ''}` : x && x.watched ? '👀' : '—'}</td><td>${x && x.lapM && x.lapB ? dS(x.lapB - x.lapM) : x && x.watched ? 'visto en carrera' : ''}</td></tr>`;
+  const table = gen ? tracks.filter((t) => D.tracks[t] || schCalendar().includes(t)).map((t) => row(t, D.tracks[t])).join('') : Object.entries(d.kn || {}).filter(([t, x]) => trackDef(t) && x && x.th).map(([t, x]) => row(t, x)).join('');
+  const undone = (t) => !(D.tracks[t] && (D.tracks[t].st || 0) >= SCHOOL.STAGES.length && D.tracks[t].prueba);
+  const cats = [['cal', '🏁 Calendario', schCalendar()], ['actuales', '🏁 Actuales', tracks.filter((t) => trackBlock(trackDef(t)) === 'actuales')], ['clasicos', '🕰 Clásicos', tracks.filter((t) => trackBlock(trackDef(t)) === 'clasicos')], ['otros', '🌍 Inventados y tuyos', tracks.filter((t) => ['inventados', 'mios'].includes(trackBlock(trackDef(t))))]]
+    .map(([k2, l, list]) => [k2, l, list.filter(undone)]).filter(([k2, , list]) => list.length > (k2 === 'cal' ? 1 : 0));
+  const trf = gen && !(k && k.st) ? knTransfer(tid, T) : null;
+  const intro = gen ? `El piloto de pruebas aprende cada circuito desde cero, por etapas y del tirón, y <b>lo usan ${D.who === 'equipo' ? (M ? 'solo los pilotos de tu equipo' : 'solo tú') : 'todos los pilotos'}</b>, también los autogenerados y los de la cantera; cada uno lo aprovecha según sus stats y con su propio estilo. Si un piloto tiene entrenamiento propio en un circuito, usa el suyo.${trf ? ` <b>${esc(T.name)} aún no está aprendido:</b> mientras, se usa lo aprendido en las curvas más parecidas de otros circuitos (da algo menos que entrenarlo).` : ''}`
+    : k ? '' : G && knOk(G, n) ? `${esc(d.name)} parte de lo que sabe el piloto de pruebas de ${esc(T.name)} y lo afina a su manera.` : vet ? `${esc(d.name)} ya conoce ${esc(T.name)}: empieza con la trazada de manual y lo que puede ganar son décimas.` : `${esc(d.name)} no ha corrido nunca en ${esc(T.name)}: empieza de cero, con miedo y por el centro de la pista.`;
   box.innerHTML = `<div class="pw-top"><button class="back" id="scBack" title="Volver">‹</button><h1>Escuela de pilotaje</h1></div>
     <div class="pw-body sc">
-      <div class="note">Cada piloto aprende cada circuito por etapas: primero a ir rápido solo en pista, luego a ir limpio con coches cerca y, por último, a gastar bien la batería. Lo que aprende lo usa en clasificación y en carrera; cuánto aprovecha lo deciden sus stats. Los rivales también aprenden un poco viendo al que mejor conoce cada circuito.</div>
-      <div class="sc-pick"><select class="sel" id="scDrv">${drivers.map((x) => `<option value="${x.id}" ${x === d ? 'selected' : ''}>${esc(x.name)}${x.team ? '' : ' (cantera)'}</option>`).join('')}</select>
-        <select class="sel" id="scTrk">${schTrackList().map((t) => `<option value="${t}" ${t === tid ? 'selected' : ''}>${esc(trackDef(t).name)}</option>`).join('')}</select></div>
-      <div class="sc-intro muted">${k ? '' : vet ? `${esc(d.name)} ya conoce ${esc(T.name)}: empieza con la trazada de manual y lo que puede ganar son décimas.` : `${esc(d.name)} no ha corrido nunca en ${esc(T.name)}: empieza de cero, con miedo y por el centro de la pista.`}</div>
+      <div class="pw-chips sc-mode"><button class="pw-chip ${gen ? 'on' : ''}" data-scmode="gen">👥 Para todos</button><button class="pw-chip ${gen ? '' : 'on'}" data-scmode="drv">👤 Un piloto</button></div>
+      <div class="sc-pick">${gen ? '' : `<select class="sel" id="scDrv">${drivers.map((x) => `<option value="${x.id}" ${x === d ? 'selected' : ''}>${esc(x.name)}${x.team ? '' : ' (cantera)'}</option>`).join('')}</select>`}
+        <select class="sel" id="scTrk">${schTrackOpts(tid)}</select></div>
+      <div class="sc-intro muted">${intro}</div>
+      ${gen ? `<div class="pw-chips sc-who"><span class="muted">Quién lo usa:</span><button class="pw-chip ${D.who !== 'equipo' ? 'on' : ''}" data-scwho="todos">Todos</button><button class="pw-chip ${D.who === 'equipo' ? 'on' : ''}" data-scwho="equipo">${M ? 'Solo mi equipo' : 'Solo yo'}</button></div>` : ''}
       <div class="sc-stages">${stages}</div>
       ${status}
       ${nums}
-      <div class="sc-vis">${schChartSVG(k || {}, chartSt)}${schMapSVG(T, k ? k.th : vet ? null : SCHOOL.rookieTh(T), apt)}</div>
-      <div class="sc-leg muted"><span class="l1"></span>trazada de manual <span class="l2"></span>la suya</div>
-      <div class="sc-apt"><b>Lo que aprovecha de lo aprendido</b> (sus stats): curvas rápidas ${pc(apt.fast)} · curvas lentas ${pc(apt.slow)} · frenada ${pc(apt.brake)} · trazada ${pc(apt.line)} · batería ${pc(0.5 + 0.5 * apt.energy)}</div>
+      <div class="sc-vis">${schChartSVG(k || {}, chartSt)}${schMapSVG(T, k ? k.th : gen || !vet ? SCHOOL.rookieTh(T) : null, apt)}</div>
+      <div class="sc-leg muted"><span class="l1"></span>trazada de manual <span class="l2"></span>la ${gen ? 'aprendida' : 'suya'}</div>
+      ${gen ? '' : `<div class="sc-apt"><b>Lo que aprovecha de lo aprendido</b> (sus stats): curvas rápidas ${pc(apt.fast)} · curvas lentas ${pc(apt.slow)} · frenada ${pc(apt.brake)} · trazada ${pc(apt.line)} · batería ${pc(0.5 + 0.5 * apt.energy)}</div>`}
       <div class="ac-row sc-act">
         ${mine ? '<button class="btn big" id="scStop">⏸ Parar</button>' : `<button class="btn big" id="scGo">▶ ${k && k.g ? 'Seguir entrenando' : 'Empezar'}</button>`}
+        ${gen && !mine ? cats.map(([k2, l, list]) => `<button class="btn ghost" data-scq="${k2}" title="Uno detrás de otro (unos minutos por circuito)">▶▶ ${l} (${list.length})</button>`).join('') : ''}
         ${k ? `<button class="btn ghost" id="scReset" title="Olvidar lo aprendido en este circuito y volver a empezar como un novato">↺ Desde cero</button>` : ''}
         <button class="btn ghost" id="scCores" title="Hilos del procesador para entrenar (más, más rápido, pero gasta más batería)">🧵 ${S.settings.schoolCores || 'auto'}</button>
       </div>
-      ${known ? `<h3>Lo que sabe ${esc(d.name)} de cada circuito</h3><table class="sc-tab"><tr><th>Circuito</th><th>Etapas</th><th>Frente al manual</th></tr>${known}</table>` : ''}
+      ${table ? `<h3>${gen ? 'Lo que sabe el piloto de pruebas' : `Lo que sabe ${esc(d.name)}`} de cada circuito</h3><table class="sc-tab"><tr><th>Circuito</th><th>Etapas</th><th>Frente al manual</th></tr>${table}</table>` : ''}
     </div>`;
+  const busyRace = () => { if (S.race && !S.placeholder && S.race.phase !== 'done') { flash('TERMINA LA CARRERA ANTES DE ENTRENAR', 1400); return true; } return false; };
   $('#scBack').onclick = () => { closeModal(); if (!S.race || S.placeholder) showHome(); };
-  $('#scDrv').onchange = (e) => { S.schDrv = e.target.value; renderSchool(); };
+  $$('#mbox [data-scmode]').forEach((b) => (b.onclick = () => { S.schMode = b.dataset.scmode; renderSchool(); }));
+  $$('#mbox [data-scwho]').forEach((b) => (b.onclick = () => { schoolData().who = b.dataset.scwho; Store.save('escuela.json', schoolData()); renderSchool(); }));
+  $$('#mbox [data-sctrk]').forEach((b) => (b.onclick = () => { S.schTrk = b.dataset.sctrk; renderSchool(); }));
+  if ($('#scDrv')) $('#scDrv').onchange = (e) => { S.schDrv = e.target.value; renderSchool(); };
   $('#scTrk').onchange = (e) => { S.schTrk = e.target.value; renderSchool(); };
-  if ($('#scGo')) $('#scGo').onclick = () => { if (S.race && !S.placeholder && S.race.phase !== 'done') { flash('TERMINA LA CARRERA ANTES DE ENTRENAR', 1400); return; } schoolStart(d, tid); };
+  if ($('#scGo')) $('#scGo').onclick = () => { if (!busyRace()) schoolStart(gen ? null : d, tid); };
+  const runQ = (list) => { if (busyRace() || !list.length) return; const q = list.filter((t) => t !== tid); const first = list.includes(tid) ? tid : q.shift(); S.schTrk = first; schoolStart(null, first, undefined, q); };
+  $$('#mbox [data-scq]').forEach((b) => (b.onclick = () => { const c2 = cats.find((x) => x[0] === b.dataset.scq); if (c2) runQ(c2[2]); }));
   if ($('#scStop')) $('#scStop').onclick = () => schoolStop();
-  if ($('#scReset')) $('#scReset').onclick = () => { if (!confirm(`¿Olvidar lo que sabe ${d.name} de ${T.name} y empezar como un novato?`)) return; if (mine) schoolStop(true); const vetNow = knVet(d, tid); d.kn[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: vetNow, hold: vetNow, hist: [] }; knSave({ d }); renderSchool(); };
-  $('#scCores').onclick = () => { const o = [0, 1, 2, 4, 6], i = o.indexOf(S.settings.schoolCores || 0); S.settings.schoolCores = o[(i + 1) % o.length]; saveAll(); const was = SCH.run; if (was) schoolStop(true); schoolKill(); if (was) schoolStart(was.d, was.tid, was.stage); renderSchool(); };
-  $$('#mbox [data-scst]').forEach((b) => (b.onclick = () => { const i = +b.dataset.scst; if (i > done) return; if (S.race && !S.placeholder && S.race.phase !== 'done') { flash('TERMINA LA CARRERA ANTES DE ENTRENAR', 1400); return; } schoolStart(d, tid, i); }));
+  if ($('#scReset')) $('#scReset').onclick = () => {
+    if (!confirm(gen ? `¿Olvidar lo que sabe el piloto de pruebas de ${T.name} y empezar de cero?` : `¿Olvidar lo que sabe ${d.name} de ${T.name} y empezar como un novato?`)) return;
+    if (mine) schoolStop(true);
+    if (gen) { D.tracks[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: false, hist: [] }; knSave({ gen: true }); }
+    else { const vetNow = knVet(d, tid); d.kn[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: vetNow, hold: vetNow, hist: [] }; knSave({ d }); }
+    renderSchool();
+  };
+  $('#scCores').onclick = () => { const o = [0, 1, 2, 4, 6, 8, 12], i = o.indexOf(S.settings.schoolCores || 0); S.settings.schoolCores = o[(i + 1) % o.length]; saveAll(); const was = SCH.run; if (was) schoolStop(true); schoolKill(); if (was) schoolStart(was.gen ? null : was.d, was.tid, was.stage, was.queue); renderSchool(); };
+  $$('#mbox [data-scst]').forEach((b) => (b.onclick = () => { const i = +b.dataset.scst; if (i > done || busyRace()) return; schoolStart(gen ? null : d, tid, i); }));
 }
 // ---------------- Examen por categorías ----------------
 // siempre con los 8 pilotos de serie (4 escuderías) y los estrategas de partida: aunque en tu temporada cambien, la nota se puede comparar
@@ -16991,6 +17344,7 @@ async function boot() {
   S.trainer = newTrainer(br);
   S.lastGenSaved = S.trainer.gen;
   initNets(await Store.load('redes.json'), br);
+  S.school = (await Store.load('escuela.json')) || null; schoolData(); // v1.20: lo que sabe el piloto de pruebas de cada circuito
   if (!S.trainer.ready) S.settings.brain = 'reglas';
   const stj = await Store.load('estrategas.json');
   initStratLib(await Store.load('estrategas_lib.json'), stj);
