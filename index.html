@@ -1163,7 +1163,7 @@ body.focus #hudOrders.on{display:flex;flex-direction:column;gap:3px;position:abs
 .or-row small{color:var(--mut);font-size:10.5px;white-space:nowrap;min-width:26px}
 .or-row select{flex:1 1 0;min-width:0;background:#1b1f27;color:#fff;border:1px solid var(--line);border-radius:7px;font:600 11.5px 'Titillium Web',system-ui;height:28px;padding:0 2px}
 .or-row.out{opacity:.6}
-.or-row.sel b{text-decoration:underline}
+.or-row.sel b,.or-blk.sel .or-row b{text-decoration:underline}
 .or-row.hi{animation:orHi 1.4s ease}
 @keyframes orHi{0%,60%{background:#ffffff22}100%{background:transparent}}
 body.focus #msgs{bottom:calc(56px + var(--ordH,0px))!important}
@@ -1265,12 +1265,33 @@ body.focus #msgs{bottom:calc(60px + var(--ordH,0px) + var(--sab))!important}
   body.focus #replay{right:calc(52px + var(--sar))!important}
   #wxPanel.on{right:52px}
 }
+
+/* v1.18: ❗ de sanción en la torre; aviso de dirección de carrera debajo de la repetición (la repetición ya no baila) */
+#hudList .hpen{display:inline-block;margin-left:3px;width:12px;height:12px;border-radius:3px;background:#ffb020;color:#1a1200;font:900 10px/12px var(--num);text-align:center;font-style:normal;vertical-align:1px}
+body.focus #rcMsg.on{top:calc(var(--rcT,48px) + var(--sat) + var(--topx))}
+
+/* v1.18: stats desplegables en las tarjetas de piloto */
+.of-st{margin-top:6px}
+.of-st summary{cursor:pointer;font-size:12.5px;color:var(--mut);list-style:none}
+.of-st summary::-webkit-details-marker{display:none}
+.of-st .bars{display:grid;grid-template-columns:auto 1fr 26px;gap:3px 8px;align-items:center;font-size:12px;margin-top:6px}
+.of-st .bar{height:6px;background:#ffffff14;border-radius:3px;overflow:hidden}
+.of-st .bar i{display:block;height:100%;background:var(--acc,#ff2e88)}
+.of-st .v{text-align:right;font-weight:700}
+
+/* v1.18: barra de tus pilotos más visual: cada piloto en un bloque con su línea de información */
+.or-blk{border-radius:8px;padding:2px 3px}
+.or-blk.sel{background:#ffffff0d}
+.or-blk + .or-blk{border-top:1px solid #ffffff12;margin-top:2px;padding-top:4px}
+.or-info{font-size:11px;color:#c9d1dc;padding:1px 3px 2px 4px;line-height:1.3}
+.or-info b{font-weight:800}
+@media (orientation:landscape) and (max-height:520px){ .or-info{font-size:10px;padding:0 2px 1px 4px} }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.17 · FASE 17</small></div>
+    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.18 · FASE 18</small></div>
     <button class="btn" id="btnMenu" title="Menú: todas las opciones">☰<span class="long"> Menú</span></button>
     <div id="raceinfo">
       <div class="lap"><span id="lapLbl">VUELTA</span> <b id="lapNow">–</b><span>/<b id="lapTot">–</b></span></div>
@@ -1287,6 +1308,7 @@ body.focus #msgs{bottom:calc(60px + var(--ordH,0px) + var(--sab))!important}
       <button class="btn" data-sp="4">x4</button>
       <button class="btn" data-sp="8">x8</button>
       <button class="btn" data-sp="16">x16</button>
+      <button class="btn" id="btnHl" title="Modo resumen: x4 y frena sola a x1 en lo importante">🎞<span class="long"> Resumen</span></button>
       <button class="btn" id="btnSkip" title="Simular el resto de la carrera al instante">⏭<span class="long"> Final</span></button>
     </div>
     <div class="grp">
@@ -1329,7 +1351,7 @@ body.focus #msgs{bottom:calc(60px + var(--ordH,0px) + var(--sab))!important}
         </div>
         <div id="hudOrders"></div>
         <div id="hudMore">
-          <button id="hCam"><span>📷</span>Seguir coche</button><button id="hList"><span>☰</span>Lista</button><button id="hNames"><span>🏷</span>Nombres</button><button id="hSound"><span>🔊</span>Sonido</button><button id="hRot"><span>⟳</span>Girar vista</button><button id="hOrd"><span>🎧</span>Barra de órdenes</button><button id="hPits"><span>🅿</span>Paradas: automáticas</button>
+          <button id="hCam"><span>📷</span>Seguir coche</button><button id="hList"><span>☰</span>Lista</button><button id="hNames"><span>🏷</span>Nombres</button><button id="hSound"><span>🔊</span>Sonido</button><button id="hRot"><span>⟳</span>Girar vista</button><button id="hOrd"><span>🎧</span>Barra de órdenes</button><button id="hPits"><span>🅿</span>Paradas: automáticas</button><button id="hHl"><span>🎞</span>Modo resumen: no</button><button id="hSkipEnd"><span>⏭</span>Simular hasta el final</button>
         </div>
         <button id="hExit" title="Salir de la pantalla completa">✕</button>
         <div id="rcMsg"></div>
@@ -2303,6 +2325,15 @@ class Race {
     for (let k = 0; k < n; k++) { w += wpl; t += degCost(Math.min(1.2, w)); if (w > 0.97) t += 30; }
     return t;
   }
+  repairWorth(c, lapNow, left) {
+    const d = c.dmg, fw = d.fw > 0.08 ? d.fw : 0, rw = d.rw > 0.1 ? d.rw : 0, su = d.su > 0.2 ? d.su - 0.1 : 0; // solo lo que se arregla en boxes
+    if (!fw && !rw && !su) return false;
+    const loss = (this.T.refLap || 80) * 1.06 * (0.085 * fw + 0.03 * rw + 0.07 * su); // s por vuelta
+    const extra = (fw ? 3.7 : 0) + (rw ? 6 : 0) + (su ? 9.5 : 0);
+    const toStop = c.plan && c.plan.idx + 1 < c.plan.seq.length ? Math.max(0, c.plan.nextStop - lapNow) : left;
+    if (toStop <= 2 && loss < 2.5) return false; // le toca parar enseguida: se arregla entonces
+    return loss * Math.min(left, toStop + 2) > 0.85 * (this.stopCost(c) * (this.sc ? 0.55 : this.vsc ? 0.65 : 1) + extra);
+  }
   stopCost(c) { return (this.T.pitLoss || PIT_LOSS) * (1 - 0.35 * (c.st ? c.st.stopBias : 0)) + 1.0; } // +1 s: la vuelta de salida con las gomas frías
   planStrategy(c) {
     if (this.wx.wet > 0.25) { c.tyre = this.wx.wet > 0.78 ? 'W' : 'I'; c.plan = null; return; }
@@ -2324,7 +2355,8 @@ class Race {
     const jf = this.o.jefes && this.o.jefes[c.team.id];
     // (en carreras cortas hay menos margen para inventos: el ruido se encoge con las vueltas)
     const lenK = clamp(laps / 20, 0.3, 1);
-    const noise = 2.4 * lenK * (jf ? (1.5 - jf.lec) * (jf.rasgos.includes('jugador') ? 2.2 : 1) : 1);
+    const noise = 2.4 * lenK * (jf ? clamp(1.7 - 1.4 * jf.lec, 0.25, 1.4) * (jf.rasgos.includes('jugador') ? 2.2 : 1) : 1);
+    const noiseK = this.o.aiNoiseK && c.team.id !== this.o.mgrTeam ? this.o.aiNoiseK : 1; // v1.18: dificultad // v1.18: los buenos estrategas fallan menos (antes la diferencia era pequeña)
     // orden de los compuestos: lo normal es salir con el más blando (posición en pista y salida) y acabar con el duro;
     // los del fondo de la parrilla a veces hacen lo contrario para alargar y ganar con la estrategia
     const SOFT = { S: 1, M: 0, H: -1 };
@@ -2332,7 +2364,7 @@ class Race {
     const ordK = back ? -0.25 : 0.9;
     for (const o of opts) {
       const ord = o.seq.length > 1 ? Math.sign(SOFT[o.seq[0]] - SOFT[o.seq[o.seq.length - 1]]) : 0;
-      o.score = o.cost - ordK * ord + (this.rng() - 0.5) * noise;
+      o.score = o.cost - ordK * ord + (this.rng() - 0.5) * noise * noiseK;
     }
     opts.sort((x, y) => x.score - y.score);
     // v1.13: estrategia elegida desde el muro antes de la carrera (goma de salida y número de paradas)
@@ -2374,6 +2406,7 @@ class Race {
     if (c.finished || c.dnf) return;
     if (left < 1) { c.manualPit = null; return; } // en la última vuelta se llega a meta como sea
     // estrategia manual (modo manager): solo para si se lo ordenan o si hay un pinchazo
+    if (c.dtPending && !c.pit) { c.pitPlan = { comp: c.tyre, reason: 'drive-through', drive: true }; return; } // v1.18
     if (c.manualStrat && !c.manualPit && !c.punct) return;
     if (c.manualPit) { c.pitPlan = { comp: c.manualPit, reason: 'orden del equipo' }; c.manualPit = null; return; }
     const wet = this.wx.wet, cp = COMPOUNDS[c.tyre], st = c.st;
@@ -2405,7 +2438,10 @@ class Race {
       }
       if (c.punct) reason = 'pinchazo';
       else if (c.flat > 0.7 && left >= 2) reason = 'plano en el neumático';
-      else if ((c.dmg.fw > 0.35 || c.dmg.rw > 0.35 || c.dmg.su > 0.5 || c.dmg.sp > 0.4 || c.powerLoss < 0.95) && left >= 2) reason = 'reparar daños';
+      // v1.18: el fondo y el motor no se arreglan en boxes: paraban una y otra vez a «reparar» (hasta 15 paradas). Ahora solo una vez, a revisar
+      // v1.18: reparar según lo que cuesta de verdad: lo que pierde por vuelta (medido: el alerón delantero roto
+      // a la mitad son ~4 % de la vuelta) por las vueltas que quedan (o hasta la parada prevista) contra lo que cuesta parar
+      else if (left >= 2 && (c.dmg.su > 0.5 || ((c.dmg.sp > 0.4 || c.powerLoss < 0.95) && !c.dmgChecked) || this.repairWorth(c, lapNow, left))) reason = 'reparar daños';
       else if (c.plan && lapNow >= c.plan.nextStop && left >= 1 && c.plan.idx + 1 < c.plan.seq.length) reason = 'parada prevista';
       // cubrirse: el de detrás ha parado antes para el undercut → parar ya para no perder la posición
       else if (quick && c.plan && cp.dry && c.chaserPitted && c.chaserPitted.lap >= c.lapsDone - 1 && st.cover >= 0.5 && c.plan.idx + 1 < c.plan.seq.length && left >= 2
@@ -2413,8 +2449,10 @@ class Race {
       else if (c.wear > st.wornAt && left >= 2) reason = 'neumáticos gastados';
       else if (radio && c.wear > st.wornAt * 0.82 && left >= 2) reason = 'el piloto dice que las gomas no dan más';
       else if (c.wear + wpl * (left + 1) > 1.02 && left >= 1 && c.wear > 0.45) reason = 'no llegan al final';
-      else if (this.sc && left >= 2 && (c.wear > st.scWear || (this.need2(c) && c.wear > st.scWear * 0.5))) reason = 'aprovechar el safety car';
-      else if (this.vsc && left >= 2 && (c.wear > st.scWear * 1.4 || (this.need2(c) && c.wear > st.scWear * 0.8))) reason = 'aprovechar el VSC';
+      else if (this.sc && left >= 2 && (c.wear > st.scWear || (this.need2(c) && c.wear > st.scWear * 0.5) || (quick && c.plan && c.plan.idx + 1 < c.plan.seq.length && c.plan.nextStop - lapNow <= Math.max(2, 0.45 * left)))) reason = 'aprovechar el safety car';
+      else if (this.vsc && left >= 2 && (c.wear > st.scWear * 1.4 || (this.need2(c) && c.wear > st.scWear * 0.8) || (quick && c.plan && c.plan.idx + 1 < c.plan.seq.length && c.plan.nextStop - lapNow <= Math.max(1, 0.3 * left)))) reason = 'aprovechar el VSC';
+      // v1.18: el que lleva gomas que ya no aguantan hasta el final con la parada que le queda: no esperar a la vuelta del plan
+      else if (c.plan && cp.dry && c.plan.idx + 1 < c.plan.seq.length && left >= 2 && c.plan.nextStop > lapNow + 1 && c.wear + wpl * 1.3 > 0.9) reason = 'neumáticos gastados'; // v1.18: no llega a la vuelta prevista: adelanta la parada cuando ya no aguanta otra vuelta
       else if (c.plan && cp.dry && c.plan.idx + 1 < c.plan.seq.length && left >= 2 && c.plan.nextStop - lapNow <= Math.round(st.undercut) && c.plan.nextStop > lapNow
         && c.ahead && c.ahead.gap < 45 && !c.ahead.car.pit && c.ahead.car.team.id !== c.team.id && this.undercutGain(c, c.ahead.car, c.ahead.gap) > 0) reason = 'undercut';
       else if (this.need2(c) && left <= 1 && cp.dry) reason = 'regla de dos compuestos';
@@ -2460,6 +2498,25 @@ class Race {
       if (ahead > -0.3 && ahead < 1.6 && (!stuck || ahead < stuck.a)) stuck = { car: o, a: ahead };
     }
     return { lost, stuck: stuck ? stuck.car : null };
+  }
+  // v1.18: velocidad máxima con safety car en un punto, frenando con tiempo para lo que viene (como hace el propio coche de seguridad).
+  // Antes cada coche frenaba de golpe al llegar a cada curva y el de detrás, que aún iba por recta, se le echaba encima
+  scLimit(idx, k) {
+    const T = this.T; let lim = k * T.vRL[idx];
+    for (let j = 1; j < 45; j++) { const q = (idx + j) % T.N; lim = Math.min(lim, Math.sqrt((k * T.vRL[q]) ** 2 + 2 * 8 * j * T.ds)); }
+    return lim;
+  }
+  // v1.18: si para ahora, ¿dónde sale? (puesto, el de delante y el de detrás con su distancia en segundos)
+  pitPreview(c) {
+    const loss = this.stopCost(c) * (this.sc ? 0.55 : this.vsc ? 0.65 : 1); // con safety car o VSC la parada cuesta mucho menos
+    let ahead = null, behind = null, pos = 1;
+    for (const o of this.cars) {
+      if (o === c || o.dnf || o.finished) continue;
+      const g = this.gapBetween(o, c); if (g === null) continue; // >0: va por detrás
+      if (g < loss) { pos++; if (!ahead || g > ahead.g) ahead = { car: o, g }; }
+      else if (!behind || g < behind.g) behind = { car: o, g };
+    }
+    return { loss, pos, ahead: ahead ? { car: ahead.car, gap: loss - ahead.g } : null, behind: behind ? { car: behind.car, gap: behind.g - loss } : null };
   }
   // ¿compensa el undercut? lo que gana con gomas nuevas en las vueltas hasta que pare el de delante, menos la vuelta de salida fría
   undercutGain(c, a, gapM) {
@@ -2860,8 +2917,8 @@ class Race {
       }
       const out = !!v.dnf && v.dnf.reason !== 'avería de motor';
       const hurt = v.spin || v.recover || q.spunAfter || (v.punct && !q.punct) || v.dmgTaken - q.dmg > 0.3 || v.pos > q.pos || v.off > 0.6;
-      if (out) this.penalize(b, 5, 'provocar un accidente', v);
-      else if (hurt) this.penalize(b, 2, 'provocar una colisión', v);
+      if (out) this.penalize(b, (b.dtCount || 0) >= 1 || q.sev > 0.6 ? 'DT' : 10, 'provocar un accidente', v); // v1.18: 10 s o drive-through (antes 5 s)
+      else if (hurt) this.penalize(b, 5, 'provocar una colisión', v); // (antes 2 s)
       else if (q.sev > 0.25) {
         // toque sin consecuencias: advertencia (bandera blanca y negra); a la segunda, sanción
         b.warns = (b.warns || 0) + 1;
@@ -2872,6 +2929,12 @@ class Race {
     });
   }
   penalize(c, secs, reason, victim) {
+    // v1.18: drive-through (pasar por el carril de boxes sin parar en las 3 vueltas siguientes); si ya no da tiempo, +20 s
+    if (secs === 'DT') {
+      const left = this.o.laps - c.lapsDone - 1;
+      if (left >= 3 && !c.dnf && !c.finished) { c.dtPending = { by: c.lapsDone + 3, reason }; this.ev({ type: 'sancion', car: c.id, secs: 0, dt: true, reason, victim: victim ? victim.id : null }); if (!c.pit && !c.pitPlan) this.strategize(c); return; }
+      secs = 20;
+    }
     c.pen += secs; c.penTotal += secs;
     this.ev({ type: 'sancion', car: c.id, secs, reason, victim: victim ? victim.id : null });
   }
@@ -3007,6 +3070,14 @@ class Race {
     // banderas amarillas donde hay un coche parado o la grúa trabajando
     const yz = [];
     for (let i = 0; i < n; i++) if (cars[i].dnf && !cars[i].hidden && started) yz.push(sMod[i]);
+    // v1.18: también por un trompo o un coche parado en la pista o al lado (antes solo con coches abandonados: casi nunca había)
+    if (started && !this.quali) for (let i = 0; i < n; i++) {
+      const x = cars[i];
+      if (x.dnf || x.pit || x.finished) continue;
+      const inc = (x.spin || x.recover || (x.slowT || 0) > 2) && Math.abs(x.d) < T.hw + 7;
+      if (inc) { yz.push(sMod[i]); if (!x.yCause) { x.yCause = true; this.ev({ type: 'amarilla', car: x.id, why: x.spin || x.recover ? 'trompo' : 'parado' }); } }
+      else if (x.yCause && !x.spin && !x.recover && !(x.slowT > 0)) x.yCause = false;
+    }
     for (let i = 0; i < n; i++) {
       const c = cars[i];
       c.yellow = false; c.yellowNear = false;
@@ -3371,6 +3442,7 @@ class Race {
       // ---- entrada a boxes ----
       if (c.pitPlan && !c.pit && !c.finished && sR >= PIT.entry && sR < PIT.limitIn + 10) {
         c.pit = { phase: 'lane', plan: c.pitPlan, box: this.boxes[this.teamIdx[c.team.id]], final: c.lapsDone + 1 >= this.o.laps };
+        if (c.pitPlan.drive) { c.dtPending = null; c.dtCount = (c.dtCount || 0) + 1; this.ev({ type: 'estrategia', car: c.id, txt: 'cumple el drive-through' }); }
         // los rivales cercanos se enteran: el de detrás puede intentar el overcut y el de delante cubrirse
         // (solo paradas de estrategia con pista seca: si para por daños, pinchazo o safety car no hay nada que cubrir)
         if (!this.sc && !this.vsc && ['parada prevista', 'undercut', 'no llegan al final', 'cubrir el undercut', 'orden del equipo'].includes(c.pitPlan.reason)) for (const y of cars) {
@@ -3539,7 +3611,7 @@ class Race {
           if (sR < PIT.limitIn) vAllow = Math.min(vAllow, brakeReach(PIT.speed, PIT.limitIn - sR, b * 0.9));
           else vAllow = Math.min(vAllow, PIT.speed);
           // si ya ha terminado la carrera (o es su última vuelta) pasa sin parar
-          if (pt.final || c.finished || this.leaderFinishT !== null) { pt.phase = 'out'; pt.drive = true; }
+          if (pt.final || c.finished || this.leaderFinishT !== null || (pt.plan && pt.plan.drive)) { pt.phase = 'out'; pt.drive = true; }
           // si el compañero está en el box, espera justo detrás de su garaje
           const mate = cars.find((x) => x !== c && x.team.id === c.team.id);
           const queue = mate && mate.pit && (mate.pit.phase === 'stop' || mate.pit.phase === 'ready') && mate.pit.box === pt.box ? (PIT.boxSpacing || 17) / 2 : 0;
@@ -3554,9 +3626,9 @@ class Race {
             const slow = rng() < 0.02 + 0.16 * (1 - bx) ? 1.5 + rng() * 3 : 0;
             const fix = [];
             let extra = 0;
-            if (c.dmg.fw > 0.15) { extra += 3 + rng() * 1.5; fix.push('fw'); }
-            if (c.dmg.rw > 0.2) { extra += 5 + rng() * 2; fix.push('rw'); }
-            if (c.dmg.su > 0.35) { extra += 8 + rng() * 3; fix.push('su'); }
+            if (c.dmg.fw > 0.08) { extra += 3 + rng() * 1.5; fix.push('fw'); }
+            if (c.dmg.rw > 0.1) { extra += 5 + rng() * 2; fix.push('rw'); }
+            if (c.dmg.su > 0.2) { extra += 8 + rng() * 3; fix.push('su'); }
             // v1.12: si el coche está muy tocado (suspensión, pontón, motor), el equipo lo retira en boxes en vez de seguir lejísimos
             const sev = Math.max(c.dmg.su, c.dmg.sp * 1.2, (1 - c.powerLoss) * 9, (c.dmg.fw + c.dmg.rw) / 2.2);
             if (sev > 0.62 && rng() < 0.35 + (sev - 0.62) * 2.5) { c.v = 0; c.pit = false; this.retire(c, 'se retira en boxes: daños demasiado graves'); c.hidden = true; c.parked = true; continue; }
@@ -3575,6 +3647,7 @@ class Race {
             if (pt.fix.includes('fw')) c.dmg.fw = 0;
             if (pt.fix.includes('rw')) c.dmg.rw = 0;
             if (pt.fix.includes('su')) c.dmg.su = 0.1; // arreglo provisional
+            if (c.dmg.sp > 0.4 || c.powerLoss < 0.95) c.dmgChecked = true;
             if (c.plan) {
               if (['parada prevista', 'undercut', 'cubrir el undercut'].includes(pt.plan.reason) && c.plan.seq[c.plan.idx + 1] === comp) { c.plan.idx++; c.plan.nextStop = c.lapsDone + 1 + (c.plan.splits[c.plan.idx] || 99); }
               else c.plan = null;
@@ -3609,8 +3682,9 @@ class Race {
       // safety car: nadie adelanta y todos van detrás en fila
       if (runOrder && !c.pit && !c.finished) {
         const k = runOrder.indexOf(c);
+        const scWaitK = this.sc && this.sc.phase === 'wait' ? 0.64 + 0.36 * Math.max(0, 1 - (t - this.sc.t0) / 5) : 0.64;
         if (this.sc && k === 0) {
-          if (this.sc.phase === 'wait') vAllow = Math.min(vAllow, 0.64 * T.vRL[idx]); // v1.16: al ritmo del VSC desde el primer momento (antes casi a fondo: daba una vuelta entera antes de neutralizarse)
+          if (this.sc.phase === 'wait') vAllow = Math.min(vAllow, this.scLimit(idx, scWaitK)); // v1.16: al ritmo del VSC (v1.18: bajando en unos segundos y frenando con tiempo)
           else {
             const gapSC = this.sc.sTot - c.sTot - 40;
             vAllow = Math.min(vAllow, Math.max(0, this.sc.v + gapSC * 0.8), gapSC > 150 ? 0.8 * T.vRL[idx] : 1e9);
@@ -3618,8 +3692,11 @@ class Race {
         } else if (k > 0) {
           const ah = runOrder[k - 1];
           const gap = ah.sTot - c.sTot - P.carLen;
-          if (this.sc) vAllow = Math.min(vAllow, (this.sc.phase === 'wait' ? 0.64 : 0.82) * T.vRL[idx]);
-          if (gap < 45) vAllow = Math.min(vAllow, Math.max(0, ah.v + (gap - 12) * 0.7));
+          if (this.sc) vAllow = Math.min(vAllow, this.scLimit(idx, this.sc.phase === 'wait' ? scWaitK : 0.82));
+          // v1.18: en la fila del safety car, más hueco con el de delante (antes ~1 toque por safety car, casi siempre al frenar todos a la vez)
+          const gTgt = this.sc ? 20 : 12;
+          if (this.sc && gap < P.carLen * 0.6) vAllow = Math.min(vAllow, Math.max(0, ah.v - 4)); // encima del de delante: frenar, no ponerse al lado
+          if (gap < 45 + (this.sc ? 15 : 0)) vAllow = Math.min(vAllow, Math.max(0, ah.v + (gap - gTgt) * 0.7));
           // v1.6.6: y que pueda frenar a tiempo si el de delante frena fuerte (en la fila del coche de seguridad se comían al de delante)
           if (gap < 120) vAllow = Math.min(vAllow, brakeReach(Math.max(0, ah.v + Math.min(0, ah.acc || 0) * 0.35), Math.max(0, gap - 8), b * 0.7));
         }
@@ -3735,6 +3812,12 @@ class Race {
           if (dsw < -(P.carLen + 2) || dsw > 170 || o.ghost || o.pit || !slowStill) c.avoid = null;
         }
       } else c.avoid = null;
+      // v1.18: rodeando un coche parado o tocado: hasta tener hueco de verdad por el lado, se frena como si estuviera en la trazada
+      // (antes se iba a por el hueco a toda velocidad y, si no lo había, se le daba por detrás; sobre todo en la fila del safety car)
+      if (c.avoid && !c.pit) {
+        const ob2 = cars[c.avoid.id], dso = ob2 ? mod(mod(ob2.sTot, L) - mod(c.sTot, L) + L / 2, L) - L / 2 : -1;
+        if (ob2 && dso > 0 && dso < 90 && Math.abs(c.d - ob2.d) < P.carWid + 0.4) vAllow = Math.min(vAllow, brakeReach(Math.max(0, ob2.v - 1), Math.max(0, dso - P.carLen - 2), b * 0.85));
+      }
       // v1.15: restos en la pista: se ven venir y se esquivan si hay sitio. Los más finos casi siempre; en plena lucha,
       // rueda con rueda o con lluvia, peor. Si no se ve o no hay hueco, se pisan (y se puede pinchar)
       if (!this.debris.length) { c.dbDodge = null; c.dbSeen = null; }
@@ -3825,6 +3908,7 @@ class Race {
           else if (c.contactCD <= 0 && !this.o.flying && !c.avoid && !c.recover) {
             c.limits++;
             if (c.limits === 3) this.penalize(c, 5, 'límites de pista');
+            else if (c.limits === 6) this.penalize(c, 10, 'límites de pista (otra vez)');
             else if (c.limits < 3) this.ev({ type: 'aviso', car: c.id, n: c.limits });
           }
         }
@@ -3976,7 +4060,7 @@ class Race {
             const kam = (a.p.tr.has('kamikaze') ? 1 : 0) + (b.p.tr.has('kamikaze') ? 1 : 0);
             // v1.8.1: la mitad que antes (había toques en casi cada curva que iban rueda con rueda); los buenos se tocan menos
             const clean = 1.35 - 0.5 * (a.p.cons + b.p.cons) / 2;
-            if (rng() < dt * 0.06 * ag * clean * calm * (1 + kam) * (1 + ((a.sliding || b.sliding) ? 2 : 0) + wet)) forced = true;
+            if (!(this.sc || this.vsc || this.scEnding) && rng() < dt * 0.06 * ag * clean * calm * (1 + kam) * (1 + ((a.sliding || b.sliding) ? 2 : 0) + wet)) forced = true; // v1.18: con safety car o VSC nadie va rueda con rueda
           }
         }
         if (forced || (Math.abs(dsw) < P.carLen * 0.95 && Math.abs(dl) < P.carWid * 0.95)) {
@@ -4040,20 +4124,21 @@ class Race {
               victim = front;
             } else rear.v = Math.min(rear.v, front.v);
           }
+          if (this.sc || this.vsc) sev *= 0.5; // v1.18: a ritmo de safety car, un toque hace mucho menos daño
           if (fresh) {
             a.contacts++; b.contacts++;
             const mates = a.team.id === b.team.id;
             if (mates) { a.mateContacts++; b.mateContacts++; }
             this.ev({ type: 'contacto', a: a.id, b: b.id, kind, sev, mates, rear: rear.id, front: front.id, s: (a.sTot + b.sTot) / 2, d: (a.d + b.d) / 2 });
             // v1.6.4: un roce leve (sev < 0,12) no rompe nada; los golpes de verdad sí, algo menos que antes
-            if (!this.o.flying && sev > 0.12) {
+            if (!this.o.flying && sev > (kind === 'alcance' ? 0.12 : 0.18)) { // v1.18: un roce rueda con rueda flojo ya no rompe el alerón (había ~12 paradas a reparar por carrera)
               if (kind === 'alcance') {
                 this.damage(rear, 'fw', sev * 1.1);
                 this.damage(front, 'rw', sev * 0.75);
                 if (rng() < 0.3 * sev) this.puncture(front, 'toque');
                 if (sev > 0.45 && rng() < 0.4) this.startSpin(front, 'toque de ' + rear.drv.short);
               } else if (kind === 'rueda') {
-                this.damage(rear, 'fw', sev * (0.65 + 0.55 * rng()));
+                this.damage(rear, 'fw', sev * (0.5 + 0.5 * rng()));
                 if (rng() < 0.03 + 0.3 * sev) this.puncture(front, 'toque de ' + rear.drv.short);
                 if (rng() < 0.3 * sev) this.damage(front, 'su', sev * 0.6);
                 if (sev > 0.35 && rng() < 0.1 + 0.4 * sev) this.startSpin(front, 'toque de ' + rear.drv.short); // v1.8.1: menos trompos por un roce
@@ -4125,7 +4210,7 @@ class Race {
           c.qFly++;
           if (c.qFly >= this.quali) { c.qState = 'in'; c.qInT = t; }
         } else if (c.qState === 'out') c.qState = 'fly';
-        c.lapStartT = tc; c.lapsDone = k1; c.qBad = false; c.wearLine = c.wear;
+        c.lapStartT = tc; c.lapsDone = k1; if (k1 === 1 && c.posLap1 === undefined) c.posLap1 = c.pos; // v1.18: para el informe del muro (puestos en la primera vuelta) c.qBad = false; c.wearLine = c.wear;
       }
       if (t > this.qLimit()) for (const x of this.cars) if (!x.qDone) { x.qDone = true; x.hidden = true; }
       this.checkQualiDone();
@@ -4147,6 +4232,7 @@ class Race {
         }
         c.lapStartT = tc;
         c.lapsDone = k1;
+        if (k1 === 1 && c.posLap1 === undefined) c.posLap1 = 1 + this.cars.filter((o) => o !== c && !o.dnf && o.sTot > c.sTot).length; // v1.18: puesto tras la primera vuelta
         // v1.8: quién lidera cada vuelta (el primero en cruzar la meta en esa vuelta)
         if (!this.o.flying) { this.lapLeader = this.lapLeader || []; if (this.lapLeader[k1] === undefined) { this.lapLeader[k1] = c.id; c.ledLaps = (c.ledLaps || 0) + 1; } }
         // v1.9: para el análisis de después: orden y momento en que cruza cada uno la meta en cada vuelta
@@ -5758,7 +5844,9 @@ function makeDriver(opts) {
   const first = pick(N.first), last = pick(N.last);
   const short = last.normalize('NFD').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
   const pot = Math.min(99, overall(stats) + (rookie || age < 23 ? 4 + Math.floor(r() * 12) : age < 27 ? Math.floor(r() * 5) : 0));
-  return { id: opts.id || 'g' + Math.floor(r() * 1e9).toString(36), age, nat, rasgos, name: first + ' ' + last, short, num: opts.num || 2 + Math.floor(r() * 97), team: opts.team || null, perfil: '', stats, pot };
+  // v1.18: algunos traen patrocinadores (pagan por correr) y otros son buenos técnicos (ayudan a desarrollar el coche)
+  const ov0 = overall(stats), pay = r() < (ov0 < 80 ? 0.16 : 0.06) ? Math.round((0.4 + 0.9 * r()) * 10) / 10 : 0, tech = !pay && r() < (age > 27 ? 0.14 : 0.06);
+  return { id: opts.id || 'g' + Math.floor(r() * 1e9).toString(36), age, nat, rasgos, name: first + ' ' + last, short, num: opts.num || 2 + Math.floor(r() * 97), team: opts.team || null, perfil: '', stats, pot, ...(pay ? { pay } : {}), ...(tech ? { tech: true } : {}) };
 }
 
 // ---------------- Estrategas (jefes de estrategia del muro) ----------------
@@ -5805,7 +5893,7 @@ for (const d of DRIVERS) fixDriver(d);
 for (const t of TEAMS) fixCar(t.car, t.id);
 // ---------------- Parrilla real de la F1 2026 (11 escuderías y 22 pilotos, con Cadillac) ----------------
 // Nombres, dorsales y colores reales (noviembre de 2026; en Haas, Câmara sustituye a Ocon). Las stats son una estimación según su nivel y la temporada.
-const F1_2026 = {"version": 2, "teams": [{"id": "mercedes", "estratega": "calculador", "name": "Mercedes", "color": "#27f4d2", "color2": "#111111", "model": "f1", "perfil": "El coche a batir en 2026", "car": {"potencia": 95, "carga": 92, "eficiencia": 92, "fiabilidad": 88, "neumaticos": 86, "boxes": 88, "desarrollo": 90}}, {"id": "ferrari", "estratega": "arriesgado", "name": "Ferrari", "color": "#e8002d", "color2": "#ffffff", "model": "f1", "perfil": "Muy rápido a una vuelta", "car": {"potencia": 92, "carga": 93, "eficiencia": 88, "fiabilidad": 86, "neumaticos": 84, "boxes": 90, "desarrollo": 88}}, {"id": "redbull", "estratega": "arriesgado", "name": "Red Bull Racing", "color": "#3671c6", "color2": "#f5c518", "model": "f1", "perfil": "Todo gira en torno a Verstappen", "car": {"potencia": 92, "carga": 90, "eficiencia": 89, "fiabilidad": 84, "neumaticos": 82, "boxes": 92, "desarrollo": 88}, "carColor": "#1B2348", "carColor2": "#E30118"}, {"id": "mclaren", "estratega": "calculador", "name": "McLaren", "color": "#ff8000", "color2": "#1b1b1b", "model": "f1", "perfil": "Campeones del mundo, algo por detrás este año", "car": {"potencia": 90, "carga": 92, "eficiencia": 86, "fiabilidad": 88, "neumaticos": 88, "boxes": 95, "desarrollo": 90}}, {"id": "racingbulls", "estratega": "reactivo", "name": "Racing Bulls", "color": "#6692ff", "color2": "#ffffff", "model": "f1", "perfil": "Cabeza del grupo medio", "car": {"potencia": 84, "carga": 82, "eficiencia": 84, "fiabilidad": 82, "neumaticos": 80, "boxes": 82, "desarrollo": 78}, "carColor": "#F2F4F7", "carColor2": "#1434CB"}, {"id": "alpine", "estratega": "reactivo", "name": "Alpine", "color": "#0093cc", "color2": "#ff87bc", "model": "f1", "perfil": "Motor Mercedes, coche irregular", "car": {"potencia": 86, "carga": 80, "eficiencia": 82, "fiabilidad": 80, "neumaticos": 78, "boxes": 78, "desarrollo": 76}, "carColor": "#FF87BC", "carColor2": "#0093CC"}, {"id": "haas", "estratega": "conservador", "name": "Haas", "color": "#DADDE0", "color2": "#e10600", "model": "f1", "perfil": "Pequeña y eficaz", "car": {"potencia": 82, "carga": 80, "eficiencia": 80, "fiabilidad": 82, "neumaticos": 80, "boxes": 78, "desarrollo": 72}, "carColor": "#F4F4F4", "carColor2": "#D7181F"}, {"id": "audi", "estratega": "conservador", "name": "Audi", "color": "#6F747B", "color2": "#f50537", "model": "f1", "perfil": "Proyecto nuevo en crecimiento", "car": {"potencia": 80, "carga": 78, "eficiencia": 79, "fiabilidad": 74, "neumaticos": 78, "boxes": 74, "desarrollo": 80}, "carColor": "#B5B9BE", "carColor2": "#151515"}, {"id": "williams", "estratega": "calculador", "name": "Williams", "color": "#1868db", "color2": "#ffffff", "model": "f1", "perfil": "Buenos pilotos, coche justo", "car": {"potencia": 82, "carga": 76, "eficiencia": 82, "fiabilidad": 78, "neumaticos": 76, "boxes": 80, "desarrollo": 78}, "carColor": "#1868DB", "carColor2": "#FFFFFF"}, {"id": "aston", "estratega": "reactivo", "name": "Aston Martin", "color": "#229971", "color2": "#cedc00", "model": "f1", "perfil": "Año difícil con el motor nuevo", "car": {"potencia": 76, "carga": 80, "eficiencia": 74, "fiabilidad": 70, "neumaticos": 76, "boxes": 82, "desarrollo": 80}}, {"id": "cadillac", "estratega": "conservador", "name": "Cadillac", "color": "#c9a227", "color2": "#111111", "model": "f1", "perfil": "Escudería nueva, motor Ferrari", "car": {"potencia": 84, "carga": 74, "eficiencia": 78, "fiabilidad": 76, "neumaticos": 74, "boxes": 76, "desarrollo": 82}}], "drivers": [{"id": "f1_verstappen", "age": 29, "nat": "NL", "rasgos": ["remontador", "final"], "name": "Max Verstappen", "short": "VER", "num": 3, "team": "redbull", "perfil": "Cuatro veces campeón", "stats": {"rapidas": 96, "lentas": 97, "frenada": 96, "consistencia": 94, "agresividad": 82, "adelantar": 96, "defender": 94, "lluvia": 98, "presion": 97, "companerismo": 45, "energia": 95, "sucio": 60, "ritmo": 96, "salidas": 93}}, {"id": "f1_hadjar", "age": 22, "nat": "FR", "rasgos": [], "name": "Isack Hadjar", "short": "HAD", "num": 6, "team": "redbull", "perfil": "Joven y rápido", "stats": {"rapidas": 89, "lentas": 89, "frenada": 87, "consistencia": 82, "agresividad": 72, "adelantar": 84, "defender": 80, "lluvia": 82, "presion": 80, "companerismo": 72, "energia": 84, "sucio": 45, "ritmo": 89, "salidas": 82}}, {"id": "f1_antonelli", "age": 20, "nat": "IT", "rasgos": [], "name": "Kimi Antonelli", "short": "ANT", "num": 12, "team": "mercedes", "perfil": "Líder del Mundial 2026", "stats": {"rapidas": 92, "lentas": 91, "frenada": 88, "consistencia": 84, "agresividad": 72, "adelantar": 86, "defender": 80, "lluvia": 85, "presion": 84, "companerismo": 70, "energia": 86, "sucio": 40, "ritmo": 92, "salidas": 83}}, {"id": "f1_russell", "age": 28, "nat": "GB", "rasgos": ["clasif"], "name": "George Russell", "short": "RUS", "num": 63, "team": "mercedes", "perfil": "Rey de la vuelta rápida", "stats": {"rapidas": 93, "lentas": 92, "frenada": 91, "consistencia": 89, "agresividad": 68, "adelantar": 85, "defender": 87, "lluvia": 86, "presion": 86, "companerismo": 60, "energia": 90, "sucio": 45, "ritmo": 92, "salidas": 88}}, {"id": "f1_leclerc", "age": 29, "nat": "MC", "rasgos": ["clasif"], "name": "Charles Leclerc", "short": "LEC", "num": 16, "team": "ferrari", "perfil": "Velocísimo a una vuelta", "stats": {"rapidas": 94, "lentas": 93, "frenada": 92, "consistencia": 86, "agresividad": 70, "adelantar": 86, "defender": 85, "lluvia": 84, "presion": 82, "companerismo": 70, "energia": 85, "sucio": 35, "ritmo": 94, "salidas": 85}}, {"id": "f1_hamilton", "age": 41, "nat": "GB", "rasgos": ["veterano"], "name": "Lewis Hamilton", "short": "HAM", "num": 44, "team": "ferrari", "perfil": "Siete veces campeón", "stats": {"rapidas": 92, "lentas": 93, "frenada": 93, "consistencia": 90, "agresividad": 60, "adelantar": 90, "defender": 90, "lluvia": 95, "presion": 92, "companerismo": 72, "energia": 92, "sucio": 30, "ritmo": 92, "salidas": 92}}, {"id": "f1_norris", "age": 27, "nat": "GB", "rasgos": ["clasif"], "name": "Lando Norris", "short": "NOR", "num": 1, "team": "mclaren", "perfil": "Campeón del mundo 2025", "stats": {"rapidas": 93, "lentas": 94, "frenada": 90, "consistencia": 86, "agresividad": 62, "adelantar": 86, "defender": 82, "lluvia": 85, "presion": 80, "companerismo": 75, "energia": 90, "sucio": 25, "ritmo": 94, "salidas": 79}}, {"id": "f1_piastri", "age": 25, "nat": "AU", "rasgos": [], "name": "Oscar Piastri", "short": "PIA", "num": 81, "team": "mclaren", "perfil": "Frío y constante", "stats": {"rapidas": 92, "lentas": 92, "frenada": 90, "consistencia": 90, "agresividad": 60, "adelantar": 84, "defender": 86, "lluvia": 82, "presion": 88, "companerismo": 70, "energia": 88, "sucio": 30, "ritmo": 92, "salidas": 86}}, {"id": "f1_lawson", "age": 24, "nat": "NZ", "rasgos": [], "name": "Liam Lawson", "short": "LAW", "num": 30, "team": "racingbulls", "perfil": "Peleón", "stats": {"rapidas": 86, "lentas": 85, "frenada": 86, "consistencia": 80, "agresividad": 82, "adelantar": 85, "defender": 84, "lluvia": 80, "presion": 78, "companerismo": 60, "energia": 80, "sucio": 65, "ritmo": 86, "salidas": 85}}, {"id": "f1_lindblad", "age": 19, "nat": "GB", "rasgos": [], "name": "Arvid Lindblad", "short": "LIN", "num": 41, "team": "racingbulls", "perfil": "El único novato de 2026", "stats": {"rapidas": 86, "lentas": 85, "frenada": 84, "consistencia": 78, "agresividad": 76, "adelantar": 82, "defender": 76, "lluvia": 78, "presion": 76, "companerismo": 72, "energia": 78, "sucio": 45, "ritmo": 86, "salidas": 80}}, {"id": "f1_gasly", "age": 30, "nat": "FR", "rasgos": [], "name": "Pierre Gasly", "short": "GAS", "num": 10, "team": "alpine", "perfil": "Experto del grupo medio", "stats": {"rapidas": 87, "lentas": 87, "frenada": 87, "consistencia": 87, "agresividad": 62, "adelantar": 84, "defender": 83, "lluvia": 85, "presion": 85, "companerismo": 75, "energia": 86, "sucio": 35, "ritmo": 87, "salidas": 86}}, {"id": "f1_colapinto", "age": 23, "nat": "AR", "rasgos": [], "name": "Franco Colapinto", "short": "COL", "num": 43, "team": "alpine", "perfil": "Valiente", "stats": {"rapidas": 83, "lentas": 83, "frenada": 82, "consistencia": 76, "agresividad": 74, "adelantar": 82, "defender": 78, "lluvia": 78, "presion": 74, "companerismo": 70, "energia": 78, "sucio": 50, "ritmo": 83, "salidas": 80}}, {"id": "f1_bearman", "age": 21, "nat": "GB", "rasgos": [], "name": "Oliver Bearman", "short": "BEA", "num": 87, "team": "haas", "perfil": "Joven con mucho futuro", "stats": {"rapidas": 87, "lentas": 86, "frenada": 86, "consistencia": 80, "agresividad": 72, "adelantar": 84, "defender": 80, "lluvia": 82, "presion": 80, "companerismo": 72, "energia": 82, "sucio": 45, "ritmo": 86, "salidas": 84}}, {"id": "f1_camara", "age": 21, "nat": "BR", "rasgos": [], "name": "Rafael Câmara", "short": "CAM", "num": 50, "team": "haas", "perfil": "Debutante: líder de la F2", "stats": {"rapidas": 84, "lentas": 84, "frenada": 83, "consistencia": 80, "agresividad": 70, "adelantar": 80, "defender": 76, "lluvia": 80, "presion": 78, "companerismo": 72, "energia": 78, "sucio": 40, "ritmo": 84, "salidas": 82}}, {"id": "f1_hulkenberg", "age": 39, "nat": "DE", "rasgos": ["veterano"], "name": "Nico Hülkenberg", "short": "HUL", "num": 27, "team": "audi", "perfil": "Fiable y experto", "stats": {"rapidas": 86, "lentas": 87, "frenada": 87, "consistencia": 90, "agresividad": 58, "adelantar": 82, "defender": 86, "lluvia": 82, "presion": 88, "companerismo": 78, "energia": 88, "sucio": 30, "ritmo": 86, "salidas": 87}}, {"id": "f1_bortoleto", "age": 22, "nat": "BR", "rasgos": [], "name": "Gabriel Bortoleto", "short": "BOR", "num": 5, "team": "audi", "perfil": "Promesa brasileña", "stats": {"rapidas": 86, "lentas": 86, "frenada": 85, "consistencia": 84, "agresividad": 66, "adelantar": 83, "defender": 80, "lluvia": 82, "presion": 82, "companerismo": 74, "energia": 84, "sucio": 35, "ritmo": 86, "salidas": 82}}, {"id": "f1_albon", "age": 30, "nat": "TH", "rasgos": [], "name": "Alexander Albon", "short": "ALB", "num": 23, "team": "williams", "perfil": "Muy completo", "stats": {"rapidas": 88, "lentas": 87, "frenada": 88, "consistencia": 90, "agresividad": 58, "adelantar": 82, "defender": 86, "lluvia": 84, "presion": 86, "companerismo": 78, "energia": 88, "sucio": 25, "ritmo": 88, "salidas": 85}}, {"id": "f1_sainz", "age": 32, "nat": "ES", "rasgos": ["mecanico"], "name": "Carlos Sainz", "short": "SAI", "num": 55, "team": "williams", "perfil": "Listo y trabajador", "stats": {"rapidas": 89, "lentas": 89, "frenada": 90, "consistencia": 91, "agresividad": 64, "adelantar": 86, "defender": 88, "lluvia": 86, "presion": 88, "companerismo": 72, "energia": 92, "sucio": 35, "ritmo": 89, "salidas": 88}}, {"id": "f1_alonso", "age": 45, "nat": "ES", "rasgos": ["veterano", "muro"], "name": "Fernando Alonso", "short": "ALO", "num": 14, "team": "aston", "perfil": "Dos veces campeón", "stats": {"rapidas": 88, "lentas": 90, "frenada": 93, "consistencia": 92, "agresividad": 74, "adelantar": 92, "defender": 95, "lluvia": 92, "presion": 95, "companerismo": 60, "energia": 94, "sucio": 60, "ritmo": 89, "salidas": 96}}, {"id": "f1_stroll", "age": 28, "nat": "CA", "rasgos": [], "name": "Lance Stroll", "short": "STR", "num": 18, "team": "aston", "perfil": "Bueno con lluvia", "stats": {"rapidas": 80, "lentas": 80, "frenada": 82, "consistencia": 76, "agresividad": 62, "adelantar": 76, "defender": 76, "lluvia": 84, "presion": 70, "companerismo": 70, "energia": 78, "sucio": 40, "ritmo": 80, "salidas": 89}}, {"id": "f1_perez", "age": 36, "nat": "MX", "rasgos": ["remontador"], "name": "Sergio Pérez", "short": "PER", "num": 11, "team": "cadillac", "perfil": "Maestro cuidando las gomas", "stats": {"rapidas": 85, "lentas": 87, "frenada": 87, "consistencia": 82, "agresividad": 66, "adelantar": 89, "defender": 86, "lluvia": 82, "presion": 76, "companerismo": 82, "energia": 90, "sucio": 45, "ritmo": 86, "salidas": 90}}, {"id": "f1_bottas", "age": 37, "nat": "FI", "rasgos": ["veterano"], "name": "Valtteri Bottas", "short": "BOT", "num": 77, "team": "cadillac", "perfil": "Rápido y fiable", "stats": {"rapidas": 88, "lentas": 86, "frenada": 86, "consistencia": 87, "agresividad": 52, "adelantar": 78, "defender": 80, "lluvia": 80, "presion": 78, "companerismo": 88, "energia": 86, "sucio": 25, "ritmo": 87, "salidas": 81}}]};
+const F1_2026 = {"version": 2, "teams": [{"id": "mercedes", "estratega": "calculador", "name": "Mercedes", "color": "#27f4d2", "color2": "#111111", "model": "f1", "perfil": "El coche a batir en 2026", "car": {"potencia": 95, "carga": 92, "eficiencia": 92, "fiabilidad": 88, "neumaticos": 86, "boxes": 88, "desarrollo": 90}}, {"id": "ferrari", "estratega": "arriesgado", "name": "Ferrari", "color": "#e8002d", "color2": "#ffffff", "model": "f1", "perfil": "Muy rápido a una vuelta", "car": {"potencia": 92, "carga": 93, "eficiencia": 88, "fiabilidad": 86, "neumaticos": 84, "boxes": 90, "desarrollo": 88}}, {"id": "redbull", "estratega": "arriesgado", "name": "Red Bull Racing", "color": "#3671c6", "color2": "#f5c518", "model": "f1", "perfil": "Todo gira en torno a Verstappen", "car": {"potencia": 92, "carga": 90, "eficiencia": 89, "fiabilidad": 84, "neumaticos": 82, "boxes": 92, "desarrollo": 88}, "carColor": "#1B2348", "carColor2": "#E30118"}, {"id": "mclaren", "estratega": "calculador", "name": "McLaren", "color": "#ff8000", "color2": "#1b1b1b", "model": "f1", "perfil": "Campeones del mundo, algo por detrás este año", "car": {"potencia": 90, "carga": 92, "eficiencia": 86, "fiabilidad": 88, "neumaticos": 88, "boxes": 95, "desarrollo": 90}}, {"id": "racingbulls", "estratega": "reactivo", "name": "Racing Bulls", "color": "#6692ff", "color2": "#ffffff", "model": "f1", "perfil": "Cabeza del grupo medio", "car": {"potencia": 84, "carga": 82, "eficiencia": 84, "fiabilidad": 82, "neumaticos": 80, "boxes": 82, "desarrollo": 78}, "carColor": "#F2F4F7", "carColor2": "#1434CB"}, {"id": "alpine", "estratega": "reactivo", "name": "Alpine", "color": "#0093cc", "color2": "#ff87bc", "model": "f1", "perfil": "Motor Mercedes, coche irregular", "car": {"potencia": 86, "carga": 80, "eficiencia": 82, "fiabilidad": 80, "neumaticos": 78, "boxes": 78, "desarrollo": 76}, "carColor": "#FF87BC", "carColor2": "#0093CC"}, {"id": "haas", "estratega": "conservador", "name": "Haas", "color": "#DADDE0", "color2": "#e10600", "model": "f1", "perfil": "Pequeña y eficaz", "car": {"potencia": 82, "carga": 80, "eficiencia": 80, "fiabilidad": 82, "neumaticos": 80, "boxes": 78, "desarrollo": 72}, "carColor": "#F4F4F4", "carColor2": "#D7181F"}, {"id": "audi", "estratega": "conservador", "name": "Audi", "color": "#6F747B", "color2": "#f50537", "model": "f1", "perfil": "Proyecto nuevo en crecimiento", "car": {"potencia": 80, "carga": 78, "eficiencia": 79, "fiabilidad": 74, "neumaticos": 78, "boxes": 74, "desarrollo": 80}, "carColor": "#B5B9BE", "carColor2": "#151515"}, {"id": "williams", "estratega": "calculador", "name": "Williams", "color": "#1868db", "color2": "#ffffff", "model": "f1", "perfil": "Buenos pilotos, coche justo", "car": {"potencia": 82, "carga": 76, "eficiencia": 82, "fiabilidad": 78, "neumaticos": 76, "boxes": 80, "desarrollo": 78}, "carColor": "#1868DB", "carColor2": "#FFFFFF"}, {"id": "aston", "estratega": "reactivo", "name": "Aston Martin", "color": "#229971", "color2": "#cedc00", "model": "f1", "perfil": "Año difícil con el motor nuevo", "car": {"potencia": 76, "carga": 80, "eficiencia": 74, "fiabilidad": 70, "neumaticos": 76, "boxes": 82, "desarrollo": 80}}, {"id": "cadillac", "estratega": "conservador", "name": "Cadillac", "color": "#c9a227", "color2": "#111111", "model": "f1", "perfil": "Escudería nueva, motor Ferrari", "car": {"potencia": 84, "carga": 74, "eficiencia": 78, "fiabilidad": 76, "neumaticos": 74, "boxes": 76, "desarrollo": 82}}], "drivers": [{"id": "f1_verstappen", "age": 29, "nat": "NL", "rasgos": ["remontador", "final"], "name": "Max Verstappen", "short": "VER", "num": 3, "team": "redbull", "perfil": "Cuatro veces campeón", "stats": {"rapidas": 96, "lentas": 97, "frenada": 96, "consistencia": 94, "agresividad": 82, "adelantar": 96, "defender": 94, "lluvia": 98, "presion": 97, "companerismo": 45, "energia": 95, "sucio": 60, "ritmo": 96, "salidas": 93}}, {"id": "f1_hadjar", "age": 22, "nat": "FR", "rasgos": [], "name": "Isack Hadjar", "short": "HAD", "num": 6, "team": "redbull", "perfil": "Joven y rápido", "stats": {"rapidas": 89, "lentas": 89, "frenada": 87, "consistencia": 82, "agresividad": 72, "adelantar": 84, "defender": 80, "lluvia": 82, "presion": 80, "companerismo": 72, "energia": 84, "sucio": 45, "ritmo": 89, "salidas": 82}}, {"id": "f1_antonelli", "age": 20, "nat": "IT", "rasgos": [], "name": "Kimi Antonelli", "short": "ANT", "num": 12, "team": "mercedes", "perfil": "Líder del Mundial 2026", "stats": {"rapidas": 92, "lentas": 91, "frenada": 88, "consistencia": 84, "agresividad": 72, "adelantar": 86, "defender": 80, "lluvia": 85, "presion": 84, "companerismo": 70, "energia": 86, "sucio": 40, "ritmo": 92, "salidas": 83}}, {"id": "f1_russell", "age": 28, "nat": "GB", "rasgos": ["clasif"], "name": "George Russell", "short": "RUS", "num": 63, "team": "mercedes", "perfil": "Rey de la vuelta rápida", "stats": {"rapidas": 93, "lentas": 92, "frenada": 91, "consistencia": 89, "agresividad": 68, "adelantar": 85, "defender": 87, "lluvia": 86, "presion": 86, "companerismo": 60, "energia": 90, "sucio": 45, "ritmo": 92, "salidas": 88}}, {"id": "f1_leclerc", "age": 29, "nat": "MC", "rasgos": ["clasif"], "name": "Charles Leclerc", "short": "LEC", "num": 16, "team": "ferrari", "perfil": "Velocísimo a una vuelta", "stats": {"rapidas": 94, "lentas": 93, "frenada": 92, "consistencia": 86, "agresividad": 70, "adelantar": 86, "defender": 85, "lluvia": 84, "presion": 82, "companerismo": 70, "energia": 85, "sucio": 35, "ritmo": 94, "salidas": 85}}, {"id": "f1_hamilton", "tech": true, "age": 41, "nat": "GB", "rasgos": ["veterano"], "name": "Lewis Hamilton", "short": "HAM", "num": 44, "team": "ferrari", "perfil": "Siete veces campeón", "stats": {"rapidas": 92, "lentas": 93, "frenada": 93, "consistencia": 90, "agresividad": 60, "adelantar": 90, "defender": 90, "lluvia": 95, "presion": 92, "companerismo": 72, "energia": 92, "sucio": 30, "ritmo": 92, "salidas": 92}}, {"id": "f1_norris", "age": 27, "nat": "GB", "rasgos": ["clasif"], "name": "Lando Norris", "short": "NOR", "num": 1, "team": "mclaren", "perfil": "Campeón del mundo 2025", "stats": {"rapidas": 93, "lentas": 94, "frenada": 90, "consistencia": 86, "agresividad": 62, "adelantar": 86, "defender": 82, "lluvia": 85, "presion": 80, "companerismo": 75, "energia": 90, "sucio": 25, "ritmo": 94, "salidas": 79}}, {"id": "f1_piastri", "age": 25, "nat": "AU", "rasgos": [], "name": "Oscar Piastri", "short": "PIA", "num": 81, "team": "mclaren", "perfil": "Frío y constante", "stats": {"rapidas": 92, "lentas": 92, "frenada": 90, "consistencia": 90, "agresividad": 60, "adelantar": 84, "defender": 86, "lluvia": 82, "presion": 88, "companerismo": 70, "energia": 88, "sucio": 30, "ritmo": 92, "salidas": 86}}, {"id": "f1_lawson", "age": 24, "nat": "NZ", "rasgos": [], "name": "Liam Lawson", "short": "LAW", "num": 30, "team": "racingbulls", "perfil": "Peleón", "stats": {"rapidas": 86, "lentas": 85, "frenada": 86, "consistencia": 80, "agresividad": 82, "adelantar": 85, "defender": 84, "lluvia": 80, "presion": 78, "companerismo": 60, "energia": 80, "sucio": 65, "ritmo": 86, "salidas": 85}}, {"id": "f1_lindblad", "age": 19, "nat": "GB", "rasgos": [], "name": "Arvid Lindblad", "short": "LIN", "num": 41, "team": "racingbulls", "perfil": "El único novato de 2026", "stats": {"rapidas": 86, "lentas": 85, "frenada": 84, "consistencia": 78, "agresividad": 76, "adelantar": 82, "defender": 76, "lluvia": 78, "presion": 76, "companerismo": 72, "energia": 78, "sucio": 45, "ritmo": 86, "salidas": 80}}, {"id": "f1_gasly", "age": 30, "nat": "FR", "rasgos": [], "name": "Pierre Gasly", "short": "GAS", "num": 10, "team": "alpine", "perfil": "Experto del grupo medio", "stats": {"rapidas": 87, "lentas": 87, "frenada": 87, "consistencia": 87, "agresividad": 62, "adelantar": 84, "defender": 83, "lluvia": 85, "presion": 85, "companerismo": 75, "energia": 86, "sucio": 35, "ritmo": 87, "salidas": 86}}, {"id": "f1_colapinto", "pay": 0.6, "age": 23, "nat": "AR", "rasgos": [], "name": "Franco Colapinto", "short": "COL", "num": 43, "team": "alpine", "perfil": "Valiente", "stats": {"rapidas": 83, "lentas": 83, "frenada": 82, "consistencia": 76, "agresividad": 74, "adelantar": 82, "defender": 78, "lluvia": 78, "presion": 74, "companerismo": 70, "energia": 78, "sucio": 50, "ritmo": 83, "salidas": 80}}, {"id": "f1_bearman", "age": 21, "nat": "GB", "rasgos": [], "name": "Oliver Bearman", "short": "BEA", "num": 87, "team": "haas", "perfil": "Joven con mucho futuro", "stats": {"rapidas": 87, "lentas": 86, "frenada": 86, "consistencia": 80, "agresividad": 72, "adelantar": 84, "defender": 80, "lluvia": 82, "presion": 80, "companerismo": 72, "energia": 82, "sucio": 45, "ritmo": 86, "salidas": 84}}, {"id": "f1_camara", "age": 21, "nat": "BR", "rasgos": [], "name": "Rafael Câmara", "short": "CAM", "num": 50, "team": "haas", "perfil": "Debutante: líder de la F2", "stats": {"rapidas": 84, "lentas": 84, "frenada": 83, "consistencia": 80, "agresividad": 70, "adelantar": 80, "defender": 76, "lluvia": 80, "presion": 78, "companerismo": 72, "energia": 78, "sucio": 40, "ritmo": 84, "salidas": 82}}, {"id": "f1_hulkenberg", "tech": true, "age": 39, "nat": "DE", "rasgos": ["veterano"], "name": "Nico Hülkenberg", "short": "HUL", "num": 27, "team": "audi", "perfil": "Fiable y experto", "stats": {"rapidas": 86, "lentas": 87, "frenada": 87, "consistencia": 90, "agresividad": 58, "adelantar": 82, "defender": 86, "lluvia": 82, "presion": 88, "companerismo": 78, "energia": 88, "sucio": 30, "ritmo": 86, "salidas": 87}}, {"id": "f1_bortoleto", "age": 22, "nat": "BR", "rasgos": [], "name": "Gabriel Bortoleto", "short": "BOR", "num": 5, "team": "audi", "perfil": "Promesa brasileña", "stats": {"rapidas": 86, "lentas": 86, "frenada": 85, "consistencia": 84, "agresividad": 66, "adelantar": 83, "defender": 80, "lluvia": 82, "presion": 82, "companerismo": 74, "energia": 84, "sucio": 35, "ritmo": 86, "salidas": 82}}, {"id": "f1_albon", "age": 30, "nat": "TH", "rasgos": [], "name": "Alexander Albon", "short": "ALB", "num": 23, "team": "williams", "perfil": "Muy completo", "stats": {"rapidas": 88, "lentas": 87, "frenada": 88, "consistencia": 90, "agresividad": 58, "adelantar": 82, "defender": 86, "lluvia": 84, "presion": 86, "companerismo": 78, "energia": 88, "sucio": 25, "ritmo": 88, "salidas": 85}}, {"id": "f1_sainz", "tech": true, "age": 32, "nat": "ES", "rasgos": ["mecanico"], "name": "Carlos Sainz", "short": "SAI", "num": 55, "team": "williams", "perfil": "Listo y trabajador", "stats": {"rapidas": 89, "lentas": 89, "frenada": 90, "consistencia": 91, "agresividad": 64, "adelantar": 86, "defender": 88, "lluvia": 86, "presion": 88, "companerismo": 72, "energia": 92, "sucio": 35, "ritmo": 89, "salidas": 88}}, {"id": "f1_alonso", "tech": true, "age": 45, "nat": "ES", "rasgos": ["veterano", "muro"], "name": "Fernando Alonso", "short": "ALO", "num": 14, "team": "aston", "perfil": "Dos veces campeón", "stats": {"rapidas": 88, "lentas": 90, "frenada": 93, "consistencia": 92, "agresividad": 74, "adelantar": 92, "defender": 95, "lluvia": 92, "presion": 95, "companerismo": 60, "energia": 94, "sucio": 60, "ritmo": 89, "salidas": 96}}, {"id": "f1_stroll", "pay": 1.2, "age": 28, "nat": "CA", "rasgos": [], "name": "Lance Stroll", "short": "STR", "num": 18, "team": "aston", "perfil": "Bueno con lluvia", "stats": {"rapidas": 80, "lentas": 80, "frenada": 82, "consistencia": 76, "agresividad": 62, "adelantar": 76, "defender": 76, "lluvia": 84, "presion": 70, "companerismo": 70, "energia": 78, "sucio": 40, "ritmo": 80, "salidas": 89}}, {"id": "f1_perez", "pay": 0.8, "age": 36, "nat": "MX", "rasgos": ["remontador"], "name": "Sergio Pérez", "short": "PER", "num": 11, "team": "cadillac", "perfil": "Maestro cuidando las gomas", "stats": {"rapidas": 85, "lentas": 87, "frenada": 87, "consistencia": 82, "agresividad": 66, "adelantar": 89, "defender": 86, "lluvia": 82, "presion": 76, "companerismo": 82, "energia": 90, "sucio": 45, "ritmo": 86, "salidas": 90}}, {"id": "f1_bottas", "age": 37, "nat": "FI", "rasgos": ["veterano"], "name": "Valtteri Bottas", "short": "BOT", "num": 77, "team": "cadillac", "perfil": "Rápido y fiable", "stats": {"rapidas": 88, "lentas": 86, "frenada": 86, "consistencia": 87, "agresividad": 52, "adelantar": 78, "defender": 80, "lluvia": 80, "presion": 78, "companerismo": 88, "energia": 86, "sucio": 25, "ritmo": 87, "salidas": 81}}]};
 
 // ---------------- v1.8 · Leyendas, pilotos libres, escuderías históricas y estrategas legendarios ----------------
 // stats de su mejor momento (mismo orden siempre): rápidas, lentas, frenada, consistencia, agresividad, adelantar, defender, lluvia, presión, compañerismo, energía, sucio, salidas
@@ -7891,17 +7979,43 @@ function ordBarHTML() {
     // v1.15: lo que antes estaba en el Muro (🎧): la parada prevista va en el desplegable de Box y los avisos, en una línea debajo
     const plan = c.plan && c.plan.idx + 1 < c.plan.seq.length && !S.settings.manualPits ? c.plan : null;
     const boxLbl = plan ? `Box · v${plan.nextStop}→${SIM.COMPOUNDS[plan.seq[plan.idx + 1]].id}` : 'Box';
-    const warn = (S.settings.manualPits || c.punct ? wallHints(c) : []).concat(r.cars.some((x) => x !== c && x.team.id === c.team.id && x.fasterThanMate && x.sTot < c.sTot && !x.dnf) && !c.letPass && tc !== 'pasar' ? ['tu compañero va más rápido detrás (Táctica → Dejar pasar)'] : []);
-    return `<div class="or-row${hi ? ' hi' : ''}${c.id === S.sel ? ' sel' : ''}" data-car="${c.id}"><b data-orsel="1" title="Ver a este piloto" style="color:${readableOn(c.team.color)}">P${c.pos} ${esc(c.drv.short)}${fight}</b>${tyreRing(c, 'ht')}<small title="desgaste · vueltas que le quedan aprox.">${Math.round(Math.min(1, c.wear) * 100)}% · ~${life}v</small>
+    const dl = Object.values(c.dmg || {}).some((x) => x > 0.15) ? dmgLoss(c) : null;
+    const warn = (dl !== null && dl >= 0.3 ? [`daños: +${dl.toFixed(1).replace('.', ',')} s/vuelta (parar ~${Math.round((r.T.pitLoss || 20) + 4)} s)`] : []).concat(S.settings.manualPits || c.punct ? wallHints(c) : []).concat(r.cars.some((x) => x !== c && x.team.id === c.team.id && x.fasterThanMate && x.sTot < c.sTot && !x.dnf) && !c.letPass && tc !== 'pasar' ? ['tu compañero va más rápido detrás (Táctica → Dejar pasar)'] : []);
+    const info = orInfo(r, c, ia);
+    return `<div class="or-blk${c.id === S.sel ? ' sel' : ''}"><div class="or-row${hi ? ' hi' : ''}" data-car="${c.id}"><b data-orsel="1" title="Ver a este piloto" style="color:${readableOn(c.team.color)}">P${c.pos} ${esc(c.drv.short)}${fight}</b>${tyreRing(c, 'ht')}<small title="desgaste · vueltas que le quedan aprox.">${Math.round(Math.min(1, c.wear) * 100)}% · ~${life}v</small>
       <select data-os="pace" title="Ritmo: agresivo (más rápido, más errores) · sin riesgo (casi sin errores, un pelín más lento) · cuidar gomas (más lento, gasta un 28 % menos)">${opt('agresivo', pm, '🔥 Agresivo')}${opt('normal', pm, 'Normal')}${opt('conservador', pm, '🧊 Sin riesgo')}${opt('cuidar', pm, '🛞 Cuidar gomas')}${pm === 'atacar' ? opt('atacar', pm, '🔥 Atacar') : ''}</select>
       <select data-os="tac" title="Táctica">${opt('libre', tc, 'Libre')}${opt('atacar', tc, '⚔ Atacar')}${opt('defender', tc, '🛡 Defender')}${opt('guarda', tc, '🔋 Guardar')}${opt('gasta', tc, '⚡ Gastar')}${opt('pasar', tc, '↓ Dejar pasar')}</select>
-      <select data-os="box" title="Parada en boxes">${c.pit ? '<option>🅿 parando</option>' : `<option value="" ${pp ? '' : 'selected'}>${boxLbl}</option>${['S', 'M', 'H', 'I', 'W'].map((k) => opt(k, pp, '🅿 ' + SIM.COMPOUNDS[k].name)).join('')}${plan && !pp ? '<option value="stop-1">⏪ Parar 1 vuelta antes</option><option value="stop+1">⏩ Parar 1 vuelta después</option>' : ''}${pp ? '<option value="x">✕ No parar</option>' : ''}`}</select></div>${warn.length ? `<div class="or-warn" data-car="${c.id}">⚠ ${warn.join(' · ')}</div>` : ''}`;
+      <select data-os="box" title="Parada en boxes">${c.pit ? '<option>🅿 parando</option>' : `<option value="" ${pp ? '' : 'selected'}>${boxLbl}</option>${['S', 'M', 'H', 'I', 'W'].map((k) => opt(k, pp, '🅿 ' + SIM.COMPOUNDS[k].name + boxLife(r, c, k))).join('')}${plan && !pp ? '<option value="stop-1">⏪ Parar 1 vuelta antes</option><option value="stop+1">⏩ Parar 1 vuelta después</option>' : ''}${pp ? '<option value="x">✕ No parar</option>' : ''}`}</select></div>${info}${warn.length ? `<div class="or-warn" data-car="${c.id}">⚠ ${warn.join(' · ')}</div>` : ''}</div>`;
   }).join('') + rad;
+}
+// v1.18: lo que dura cada goma en este circuito (con el desgaste de esta pista y de este coche) y si llega al final
+function boxLife(r, c, k) {
+  if (!r.wearPerLap) return '';
+  const wet = r.wx ? r.wx.wet : 0, cp = SIM.COMPOUNDS[k]; if (cp.dry ? wet > 0.3 : wet < 0.15) return '';
+  const life = Math.max(1, Math.floor(0.75 / Math.max(0.01, r.wearPerLap(c, k)))), left = r.o.laps - c.lapsDone - 1;
+  return ` · ~${life} v${left > 0 ? (life >= left ? ' ✓ al final' : ` (faltan ${left - life})`) : ''}`;
+}
+// v1.18: segunda línea de cada piloto: última vuelta, dónde saldría si para ahora y si hay undercut
+function orInfo(r, c, ia) {
+  if (c.pit || !r.pitPreview || r.phase !== 'racing') return '';
+  const f = (x) => x.toFixed(1).replace('.', ',');
+  const last = c.last ? fmtLap(c.last) : '–', best = isFinite(c.best) ? fmtLap(c.best) : '';
+  const pv = r.pitPreview(c), left = r.o.laps - c.lapsDone - 1;
+  let txt = `⏱ ${last}${best && best !== last ? ` <span class="muted">(${best})</span>` : ''}`;
+  if (left >= 1) {
+    txt += ` · 🅿 si paras: <b>P${pv.pos}</b>${pv.ahead ? ` · ${f(pv.ahead.gap)} s tras ${esc(pv.ahead.car.drv.short)}${pv.ahead.gap < 1.2 ? ' <span style="color:#ffcf70">(tráfico)</span>' : ''}` : ''}${pv.behind && pv.behind.gap < 2 ? ` · ${esc(pv.behind.car.drv.short)} a ${f(pv.behind.gap)} s` : ''}${r.sc || r.vsc ? ' <span style="color:#7be07b">(parada barata)</span>' : ''}`;
+    const A = r.order[ia - 1];
+    if (A && !A.dnf && !A.pit && c.ahead && c.ahead.car === A && c.ahead.gap < 45 && r.undercutGain) { const ug = r.undercutGain(c, A, c.ahead.gap); if (ug > 0) txt += ` · <b style="color:#7be07b">⚡ undercut a ${esc(A.drv.short)} (+${f(ug)} s)</b>`; }
+    if (c.chaserPitted && c.chaserPitted.lap >= c.lapsDone - 1 && r.cars[c.chaserPitted.id]) txt += ` · <b style="color:#ffcf70">${esc(r.cars[c.chaserPitted.id].drv.short)} ha parado: cúbrete o haz el overcut</b>`;
+  }
+  return `<div class="or-info">${txt}</div>`;
 }
 function renderOrders(force) {
   const el = $('#hudOrders'); if (!el) return;
   if (!document.body.classList.contains('focus')) { el.innerHTML = ''; return; }
   if (!force && el.contains(document.activeElement)) return; // no repintar mientras eliges en un desplegable
+  if (!force && performance.now() - (el._t || 0) < 450) return; // v1.18: la línea de información cambia a cada instante: como mucho ~2 veces por segundo
+  el._t = performance.now();
   const h = ordBarHTML();
   if (force || el.dataset.h !== h) { el.innerHTML = h; el.dataset.h = h; }
   el.classList.toggle('on', !!h);
@@ -9524,10 +9638,27 @@ function carEffects(c) {
   if (aero > 0.005) eff.push(`carga −${(100 * aero).toFixed(0)} %`);
   if (drag > 0.003) eff.push(`resistencia +${(100 * drag).toFixed(0)} %`);
   if ((d.sp || 0) >= 0.55) eff.push('pontón roto: puede calentarse y abandonar');
-  if (eff.length) out.push(`🔧 Daños: ${eff.join(' · ')}`);
+  if (eff.length) { const ls = dmgLoss(c); out.push(`🔧 Daños: ${eff.join(' · ')}${ls !== null ? ` · <b style="color:${ls > 0.4 ? 'var(--bad)' : 'var(--gold)'}">≈ +${ls.toFixed(1).replace('.', ',')} s por vuelta</b> (parar a arreglarlo cuesta ~${Math.round((S.race.T.pitLoss || 20) + 4)} s)` : ''}`); }
   out.push(`🔋 Batería ${pct(c.bat || 0)} %${c.boostOn ? ' · <b>⚡ gastando</b>' : c.lifting ? ' · levantando el pie (recarga)' : ''}${c.drsOn ? ' · <b>modo adelantamiento</b>' : ''}`);
   return out.join('<br>') + '<br>';
 }
+// v1.18: cuánto cuesta cada daño por vuelta en este circuito: vueltas de prueba de un coche solo (una vez por carrera y coche)
+function dmgSens(c) {
+  const r = S.race, key = r.T.name + '|' + c.team.id;
+  S.dmgSens = S.dmgSens || {};
+  if (S.dmgSens[key] !== undefined) return S.dmgSens[key];
+  S.dmgSens[key] = null;
+  setTimeout(() => {
+    try {
+      const lap = (part) => { const q = new SIM.Race(r.T, [{ driver: c.drv, team: c.team }], { laps: 2, seed: 5, weather: 'seco', noSC: true }); const x = q.cars[0]; if (part) x.dmg[part] = 0.5; let k = 0; while (q.phase !== 'done' && k++ < 20000) q.step(1 / 30); return x.lapTimes[1] || x.lapTimes[0]; };
+      const b = lap(null), out = {};
+      for (const k of ['fw', 'rw', 'su', 'sp']) out[k] = Math.max(0, (lap(k) - b) / 0.5);
+      S.dmgSens[key] = out;
+    } catch (e) { S.dmgSens[key] = {}; }
+  }, 30);
+  return null;
+}
+function dmgLoss(c) { const sn = dmgSens(c); if (!sn) return null; const d = c.dmg || {}; let t = 0; for (const k of ['fw', 'rw', 'su', 'sp']) t += (sn[k] || 0) * (d[k] || 0); return t; }
 let cardFor = null, cardT = 0;
 const PART = { fw: 'alerón delantero', rw: 'alerón trasero', su: 'suspensión', sp: 'pontón' };
 function renderCard(force) {
@@ -10111,6 +10242,7 @@ function msgFor(r, e) {
     case 'qtiempo': return [`${nm(e.car)}: ${fmtLap(e.time)} · P${e.pos}${e.pole ? ' · ¡pole provisional!' : ''}`, e.pole ? 'green' : ''];
     case 'anulada': return [`Vuelta anulada a ${nm(e.car)} por límites de pista (${fmtLap(e.time)})`, 'bad'];
     case 'grua': return [`🟨 Bandera amarilla: la grúa retira el coche de ${nm(e.car)}`, 'sc'];
+    case 'amarilla': return [`🟨 Bandera amarilla: ${e.why === 'trompo' ? 'trompo' : 'coche parado'} de ${nm(e.car)}. No se adelanta en esa zona`, 'sc'];
     case 'grua_fin': return [`🟩 Coche de ${nm(e.car)} retirado: pista libre`, 'green'];
     case 'radio': return [`📻 ${nm(e.car)}: «${e.txt}»`, 'radio'];
     case 'estrategia': return [`🧠 ${nm(e.car)} ${e.txt}`, 'pit'];
@@ -10129,7 +10261,7 @@ function msgFor(r, e) {
     case 'vsc': return [`🟨 VSC (coche de seguridad virtual)${e.reason ? ': ' + e.reason : ''}. Todos levantan el pie y no se adelanta`, 'sc'];
     case 'vsc_fin': return ['🟩 Fin del VSC: carrera en verde', 'green'];
     case 'drs': return e.on ? ['🟦 Modo adelantamiento habilitado: a menos de 1 s del de delante hay potencia eléctrica extra en las rectas', 'green'] : (r.wx && r.wx.wet > 0.25 ? ['Modo adelantamiento deshabilitado por la lluvia', 'wx'] : null);
-    case 'sancion': return [`Comisarios: ${e.secs} s para ${nm(e.car)} por ${e.reason}${e.victim !== null && e.victim !== undefined ? ' con ' + nm(e.victim) : ''}`, 'bad'];
+    case 'sancion': return [`Comisarios: ${e.dt ? '🚦 DRIVE-THROUGH' : e.secs + ' s'} para ${nm(e.car)} por ${e.reason}${e.victim !== null && e.victim !== undefined ? ' con ' + nm(e.victim) : ''}`, 'bad'];
     case 'aviso': return [`Aviso a ${nm(e.car)} por límites de pista (${e.n}/3)`, ''];
     case 'investigacion': return [`Comisarios: investigan el toque de ${nm(e.car)} con ${nm(e.victim)}`, ''];
     case 'advertencia': return [`🏳 Bandera blanca y negra para ${nm(e.car)}: a la próxima, sanción`, 'bad'];
@@ -10162,6 +10294,10 @@ function msgImportance(r, e) {
   const mgr = typeof mgrTeam === 'function' ? mgrTeam() : null;
   const mine = ids.some((id) => id === S.sel || (mgr && r.cars[id].team.id === mgr));
   const front = ids.some((id) => r.cars[id].pos <= 3);
+  // v1.18: menos ruido pero sin perderse lo gordo: accidentes, trompos, salidas de pista, banderas y sanciones siempre
+  if (e.type === 'fuera') return e.gravel || mine ? 2.5 : 2;
+  if (e.type === 'amarilla') return 2.5;
+  if (e.type === 'adelantamiento') return front || mine ? 2 + (mine ? 1 : 0) : r.cars[e.car] && r.cars[e.car].pos <= 6 ? 1.5 : 1;
   if (['sc', 'vsc', 'vsc_fin', 'verde', 'roja', 'roja_parrilla', 'roja_fin', 'abandono', 'sancion', 'ultima', 'fin_rezagados', 'lluvia', 'salida_falsa', 'qtiempo', 'anulada'].includes(e.type)) return 3;
   const bonus = mine ? 1 : 0;
   switch (e.type) {
@@ -10174,6 +10310,53 @@ function msgImportance(r, e) {
     case 'vuelta_rapida': return 1.5 + bonus;
     default: return 1 + bonus;
   }
+}
+// v1.18: lo que hace falta para el informe del muro: cada parada de tus pilotos (puesto antes y después, a quién intentaba
+// pasar con el undercut) y qué hicieron con cada safety car
+function decTrack(r, e) {
+  const L = S.decLog; if (!L || !r.cars[e.car] && !['sc', 'vsc'].includes(e.type)) return;
+  const M = mgrTeam() || (S.raceMode !== 'libre' && meDrv() ? meDrv().team : null); if (!M) return;
+  if (e.type === 'boxes' && r.cars[e.car].team.id === M) {
+    const c = r.cars[e.car], ia = r.order.indexOf(c), A = r.order[ia - 1];
+    L.stops.push({ id: c.id, lap: c.lapsDone + 1, posIn: c.pos, reason: e.reason, comp: e.comp, ahead: A && !A.pit ? A.id : null, sc: !!(r.sc || r.vsc), res: null });
+  } else if (e.type === 'boxes_out') {
+    const c = r.cars[e.car];
+    for (const st of L.stops) if (st.id === c.id && st.posOut === undefined) { st.posOut = c.pos; st.outLap = c.lapsDone; }
+    // ¿salió bien el undercut? cuando sale de boxes el rival que tenía delante, ¿quién va primero?
+    for (const st of L.stops) if (st.ahead === c.id && st.res === null && st.outLap !== undefined) { const me = r.cars[st.id]; st.res = me.dnf ? null : me.sTot > c.sTot ? 'ok' : 'ko'; }
+  } else if (e.type === 'sc' || e.type === 'vsc') {
+    // v1.18: ¿a quién le venía bien parar? (le tocaba parar pronto o llevaba las gomas tocadas)
+    const lapNow = Math.max(...r.cars.map((x) => x.lapsDone)) + 1, left = r.o.laps - lapNow, due = {};
+    for (const c of r.cars) if (c.team.id === M && !c.dnf) due[c.id] = c.wear > 0.45 || !!(c.plan && c.plan.idx + 1 < c.plan.seq.length && c.plan.nextStop - lapNow <= Math.max(2, 0.45 * left));
+    L.sc.push({ type: e.type, lap: lapNow, t: r.t, due });
+  }
+}
+// el informe: qué te ha dado o quitado cada decisión
+function decReport(r, rec) {
+  const L = S.decLog, M = mgrTeam() || (S.raceMode !== 'libre' && meDrv() ? meDrv().team : null);
+  if (!L || !M || !r) return null;
+  const mine = r.cars.filter((c) => c.team.id === M), out = [];
+  const nm = (c) => esc(c.drv.short);
+  for (const c of mine) {
+    const x = rec.resultados.find((y) => y.driver === c.drv.id); if (!x) continue;
+    // salida (primera vuelta)
+    const p1 = c.posLap1;
+    if (p1 && x.grid) { const d = x.grid - p1; if (d) out.push(`${d > 0 ? '🟢' : '🔴'} <b>${nm(c)}</b>: ${d > 0 ? `ganó ${d}` : `perdió ${-d}`} ${Math.abs(d) === 1 ? 'puesto' : 'puestos'} en la primera vuelta (salía P${x.grid})`); }
+    for (const st of L.stops.filter((q) => q.id === c.id)) {
+      let t = `🅿 <b>${nm(c)}</b> paró en la v${st.lap} (${st.reason}) → ${SIM.COMPOUNDS[st.comp] ? SIM.COMPOUNDS[st.comp].name.toLowerCase() : st.comp}: entró P${st.posIn}${st.posOut !== undefined ? `, salió P${st.posOut}` : ''}`;
+      if (st.sc) t += ' · <b style="color:var(--go)">con safety car/VSC: parada barata</b>';
+      if (st.ahead !== null && st.res) t += st.res === 'ok' ? ` · <b style="color:var(--go)">undercut a ${esc(r.cars[st.ahead].drv.short)} ✓</b>` : ` · undercut a ${esc(r.cars[st.ahead].drv.short)} ✗`;
+      out.push(t);
+    }
+    for (const sc of L.sc) { const did = L.stops.some((q) => q.id === c.id && q.sc && Math.abs(q.lap - sc.lap) <= 1); if (!did && !c.dnf && sc.lap < r.o.laps - 1) { const due = !sc.due || sc.due[c.id]; out.push(due ? `🚨 ${sc.type === 'sc' ? 'Safety car' : 'VSC'} en la v${sc.lap}: <b>${nm(c)}</b> no paró y le tocaba parar pronto (con él la parada sale casi a mitad de precio)` : `🚨 ${sc.type === 'sc' ? 'Safety car' : 'VSC'} en la v${sc.lap}: <b>${nm(c)}</b> no paró (bien: sus gomas aún tenían mucha vida)`); } }
+    if (x.pen) out.push(`⚠ <b>${nm(c)}</b>: ${x.pen} s de sanción`);
+  }
+  // reglaje: lo que de verdad costó (no lo que creía el ingeniero)
+  try {
+    const ms = S.setup && mySetup(S.T, S.trackId, r.o.laps);
+    if (ms && !equalNow(null)) { const tr = setupTrue(S.T), w = r.wetMax > 0.3 ? 1 : 0, m = { a: tr.a + (tr.aW - tr.a) * w, u: tr.u + (tr.uW - tr.u) * w }; const sec = setupSec(S.T, setupLoss(ms.a, ms.u, m.a, m.u)); out.push(`🔧 Reglaje: ${sec < 0.01 ? 'clavado' : `te costó ≈${sec.toFixed(2).replace('.', ',')} s por vuelta (≈${(sec * r.o.laps).toFixed(1).replace('.', ',')} s en la carrera)`}`); }
+  } catch (e2) { /* sin reglaje */ }
+  return out.length ? out : null;
 }
 function processEvents() {
   const r = S.race;
@@ -10192,13 +10375,14 @@ function processEvents() {
       added = true;
     }
     spawnDebris(r, e);
-    if (e.type === 'roja_parrilla' && mgrTeam() && !S.exhibition) setTimeout(showRedTyres, 60);
+    decTrack(r, e);
+    if (S.hlOn && (['sc', 'vsc', 'roja', 'abandono', 'trompo', 'amarilla', 'sancion'].includes(e.type) || (e.type === 'contacto' && (e.sev || 0) > 0.3) || (e.type === 'adelantamiento' && msgImportance(r, e) >= 3))) S.hlHold = Math.max(S.hlHold || 0, r.t + 6);
   }
   if (S.msgs.length > 30) S.msgs.splice(0, S.msgs.length - 30);
   if (added || S.msgs.length) renderMsgs();
 }
 // v1.12: dirección de carrera (sanciones, trompos, choques, banderas…) en una franja arriba
-const RC_TYPES = new Set(['sc', 'vsc', 'vsc_fin', 'verde', 'roja', 'roja_parrilla', 'roja_fin', 'abandono', 'sancion', 'investigacion', 'advertencia', 'trompo', 'contacto', 'salida_falsa', 'anulada', 'pinchazo', 'averia', 'danio', 'lluvia', 'ultima']);
+const RC_TYPES = new Set(['amarilla', 'sc', 'vsc', 'vsc_fin', 'verde', 'roja', 'roja_parrilla', 'roja_fin', 'abandono', 'sancion', 'investigacion', 'advertencia', 'trompo', 'contacto', 'salida_falsa', 'anulada', 'pinchazo', 'averia', 'danio', 'lluvia', 'ultima']);
 function renderRc() {
   const el = $('#rcMsg'); if (!el) return;
   const rc = S.rc, life = 5500 / Math.max(1, Math.sqrt(S.speed || 1));
@@ -10228,7 +10412,8 @@ function flash(txt, ms) {
   flash._t = setTimeout(() => (f.style.display = 'none'), ms || 1800);
 }
 function updateButtons() {
-  $$('#speedGrp [data-sp]').forEach((b) => b.classList.toggle('on', (S.paused ? 0 : S.speed) === +b.dataset.sp));
+  $$('#speedGrp [data-sp]').forEach((b) => b.classList.toggle('on', !S.hlOn && (S.paused ? 0 : S.speed) === +b.dataset.sp));
+  if ($('#btnHl')) $('#btnHl').classList.toggle('on', !!S.hlOn);
   $('#camGen').classList.toggle('on', S.cam.mode === 'general');
   $('#camFol').classList.toggle('on', S.cam.mode === 'seguir');
   $('#tgNames').classList.toggle('on', S.showNames);
@@ -10242,10 +10427,11 @@ function updateButtons() {
 $$('#speedGrp [data-sp]').forEach((b) => b.addEventListener('click', () => setSpeed(+b.dataset.sp)));
 function setSpeed(sp) {
   if (sp === 0) S.paused = !S.paused;
-  else { S.speed = sp; S.paused = false; }
+  else { S.speed = sp; S.paused = false; S.hlOn = false; } // elegir una velocidad quita el modo resumen
   updateButtons();
 }
 $('#btnSkip').addEventListener('click', skipToEnd);
+$('#btnHl').addEventListener('click', () => { S.hlOn = !S.hlOn; S.paused = false; S.hlHold = 0; flash(S.hlOn ? '🎞 MODO RESUMEN: x4 Y FRENA EN LO IMPORTANTE' : 'MODO RESUMEN QUITADO', 1600); updateButtons(); });
 $('#camGen').addEventListener('click', () => fitCam(false));
 $('#camRot').addEventListener('click', () => rotateView(1));
 $('#camFol').addEventListener('click', () => follow());
@@ -10501,7 +10687,7 @@ const WEARMUL = { bajo: 0.6, normal: 1, alto: 1.6 };
 function wearLenK(laps) { return Math.max(0.45, Math.min(1.8, 12.6 / Math.max(1, laps))); }
 function resetView() {
   S.skids = []; S.fx = []; S.lastPose = []; S.doneHandled = false; S.doneAt = undefined; S.acc = 0; S.lastPhase = 'grid';
-  S.msgs = []; S.evIdx = 0; renderMsgs();
+  S.msgs = []; S.evIdx = 0; renderMsgs(); S.decLog = { stops: [], sc: [] }; // v1.18: decisiones del muro para el informe
   S.sel = null;
   S.paused = false;
   const myCar = myLeadCar(); if (myCar) S.sel = myCar.id; // v1.12: tu piloto (o el mejor de tu equipo) de entrada
@@ -10580,8 +10766,8 @@ function showQualiFinal(grid, go) {
 const mod2 = (a, n) => ((a % n) + n) % n;
 // v1.16: bandera roja: con los coches en la parrilla, tú eliges las gomas de tus pilotos para la nueva salida (antes las ponía el muro)
 function showRedTyres() {
-  const r = S.race, M = mgrTeam(); if (!r || !M || !r.red || r.red.phase !== 'grid') return;
-  const mine = r.cars.filter((c) => c.team.id === M && !c.dnf && !c.finished); if (!mine.length) return;
+  const r = S.race, M = mgrTeam(), md = !M && meDrv() ? meDrv() : null; if (!r || (!M && !md) || !r.red || r.red.phase !== 'grid') return;
+  const mine = r.cars.filter((c) => (M ? c.team.id === M : c.drv.id === md.id) && !c.dnf && !c.finished); if (!mine.length) return;
   const wet = r.wx.wet, left = r.o.laps - Math.max(...r.cars.map((c) => c.lapsDone));
   const comps = wet > 0.25 ? ['I', 'W', 'S', 'M', 'H'] : ['S', 'M', 'H', 'I', 'W'];
   modal(`<h2><small>🟥 BANDERA ROJA · ${esc(S.T.name)}</small>Gomas para la nueva salida</h2>
@@ -10747,6 +10933,7 @@ function startRace(ex, pre) {
   if (equalNow(ex)) opts.equalCars = true;
   if (!ex) opts.setups = setupsFor(S.entries, S.T, S.trackId, nLaps); // v1.11: reglajes
   if (!ex) opts.plans = stratPlansFor(S.entries); // v1.13: estrategia elegida antes de la carrera
+  if (!ex && seasonOn() && S.raceMode !== 'libre') { opts.aiNoiseK = difK('aiNoise'); opts.mgrTeam = mgrTeam(); } // v1.18: dificultad
   if (!ex && seasonOn() && S.raceMode !== 'libre') opts.moral = S.entries.map((e) => e.driver.moral ?? 70);
   if (ex && ex.type === 'g1') {
     // en cada escudería, un piloto con la red de la generación 1 y otro con la actual (al azar)
@@ -10809,14 +10996,16 @@ function finishRace() {
     vueltas: r.o.laps, parrilla: S.settings.grid, semilla: S.seed,
     cerebro: r.cars[0].brain && r.cars[0].brain.name === 'red' ? 'red gen. ' + S.trainer.gen : 'reglas',
     tiempo: r.o.weather || S.settings.weather, desgaste: S.settings.wear, safetyCars: r.scCount,
-    resultados: res.map((x) => ({ teamOrders: x.teamOrders || 0, pos: x.pos, driver: x.driver, team: x.team, time: x.time, best: x.best, points: x.points, grid: x.grid, overtakes: x.overtakes, contacts: x.contacts, offs: x.offs, mistakes: x.mistakes, dnf: x.dnf, dnfLap: x.dnfLap, lapsDown: x.lapsDown, stops: x.stops, tyres: x.tyres, pen: x.pen, led: x.ledLaps || 0 })),
+    resultados: res.map((x) => ({ teamOrders: x.teamOrders || 0, pos: x.pos, driver: x.driver, team: x.team, time: x.time, best: x.best, points: x.points, grid: x.grid, overtakes: x.overtakes, contacts: x.contacts, offs: x.offs, mistakes: x.mistakes, dnf: x.dnf, dnfLap: x.dnfLap, lapsDown: x.lapsDown, stops: x.stops, tyres: x.tyres, pen: x.pen, led: x.ledLaps || 0, defendHolds: x.defendHolds || 0 })),
     lider: r.lapLeader && r.lapLeader[r.o.laps - 1] !== undefined ? r.cars[r.lapLeader[r.o.laps - 1]].drv.id : null, mojado: (r.wetMax || 0) > 0.3,
     lideroTodo: !!(r.lapLeader && res[0] && Array.from({ length: r.o.laps }, (_, k) => r.lapLeader[k + 1]).every((c) => c === res[0].id)),
     vueltaRapida: r.fastest ? { driver: r.cars[r.fastest.car].drv.id, time: r.fastest.time, lap: r.fastest.lap } : null,
     an: buildAnalysis(r, res),
+    muro: null,
   };
   for (const old of S.champ.races.slice(0, -2)) delete old.an;
   if (!(S.sprintNow && S.raceMode === 'temporada' && seasonOn())) rec.dotd = pickDotd(rec); // v1.11: piloto del día (no en la sprint)
+  try { rec.muro = decReport(r, rec); } catch (e) { rec.muro = null; }
   rateDrivers(rec); // v1.13: nota de 1 a 10
   if (S.sprintNow && S.raceMode === 'temporada' && seasonOn()) {
     S.sprintNow = false;
@@ -10867,10 +11056,11 @@ function showResults(rec) {
   if (!S.anSel || S.anSel.rec !== rec) S.anSel = { rec, ids: rec.an ? anDefaultSel(rec.an, rec.resultados.filter((x) => x.team === mgr || (S.race && S.race.cars[S.sel] && S.race.cars[S.sel].drv.id === x.driver)).map((x) => x.driver)) : [] };
   const sel = S.anSel.ids;
   const t0 = rec.resultados[0].time;
-  const tabs = [['clas', '🏁 Clasificación'], ['an', '📈 Análisis'], ['num', '🔢 La carrera']];
+  const tabs = [['clas', '🏁 Clasificación'], ...(rec.muro ? [['muro', '🎧 Informe del muro']] : []), ['an', '📈 Análisis'], ['num', '🔢 La carrera']];
   let sec = '';
   if (tab === 'clas') sec = resultsTable(rec);
   else if (tab === 'an') sec = analysisHTML(rec.an, info, sel);
+  else if (tab === 'muro' && rec.muro) sec = `<div class="note">Qué te dio o te quitó cada decisión en esta carrera.</div><div class="news muro">${rec.muro.map((x) => `<div>${x}</div>`).join('')}</div>`;
   else sec = `<div class="rs-stats">
       <div><b>${sum('overtakes')}</b>adelantamientos</div><div><b>${sum('stops')}</b>paradas</div><div><b>${Math.round(sum('contacts') / 2)}</b>contactos</div>
       <div><b>${rec.resultados.filter((x) => x.dnf).length}</b>abandonos</div><div><b>${rec.resultados.filter((x) => x.pen).length}</b>sancionados</div><div><b>${rec.safetyCars || 0}</b>safety cars</div></div>
@@ -11831,6 +12021,31 @@ $('#hExit').addEventListener('click', exitFocus);
 $('#hPause').addEventListener('click', () => { setSpeed(0); renderHud(); });
 $('#hudTop').addEventListener('click', (e) => { if (e.target.closest('.scgo')) { followSC(); return; } if (e.target.closest('.wxp')) { showWeather(); return; } if (!e.target.closest('.hgm')) return; S.gapMode = S.gapMode === 'lider' ? 'intervalo' : 'lider'; renderHud.last = null; updateButtons(); renderSide(); renderHud(); });
 const SPEEDS = [1, 2, 4, 8, 16];
+// v1.18: modo resumen: la carrera va a x4 y frena sola a x1 en lo importante (salida, última vuelta, tus pilotos peleando o
+// entrando a boxes, toques, trompos, safety car, adelantamientos de los tuyos), y se queda unos segundos en x1
+function hlKey(r) {
+  if (!r || S.placeholder || r.quali) return true;
+  if (r.phase === 'grid' || r.phase === 'lights' || r.startT === null || r.t - r.startT < 25) return true;
+  const lead = r.order[0]; if (lead && lead.lapsDone >= r.o.laps - 1) return true;
+  if (S.hlHold && r.t < S.hlHold) return true;
+  const M = mgrTeam() || (S.raceMode !== 'libre' && meDrv() ? meDrv().team : null);
+  const mine = M ? r.cars.filter((c) => c.team.id === M && !c.dnf && !c.finished) : S.sel !== null && r.cars[S.sel] ? [r.cars[S.sel]] : [];
+  for (const c of mine) {
+    if (c.pit || c.spin || c.recover) return true;
+    if (c.pitPlan && mod2(r.T.pit.entry - mod2(c.sTot, r.T.L), r.T.L) < 600) return true;
+    const ia = r.order.indexOf(c), A = r.order[ia - 1], B = r.order[ia + 1];
+    const ga = A && !A.dnf ? r.gapBetween(c, A) : null, gb = B && !B.dnf && !B.finished ? r.gapBetween(B, c) : null;
+    if ((ga !== null && ga < 0.6) || (gb !== null && gb < 0.6)) return true;
+  }
+  return false;
+}
+function effSpeed(r) {
+  if (!S.hlOn) return S.speed;
+  const k = hlKey(r);
+  if (k && r) S.hlHold = Math.max(S.hlHold || 0, r.t + 3);
+  S.hlNow = k ? 1 : 4;
+  return S.hlNow;
+}
 const stepSpeed = (dir) => {
   const i = Math.max(0, SPEEDS.indexOf(S.speed));
   setSpeed(SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, i + dir))]);
@@ -11863,6 +12078,8 @@ $('#hMore').addEventListener('click', (e) => { e.stopPropagation(); const m = $(
 $('#hOrd').addEventListener('click', () => { S.ordersHide = !S.ordersHide; renderOrders(true); });
 $('#hudMore').addEventListener('click', (e) => { if (e.target.closest('button')) setTimeout(() => { renderHud(); }, 0); });
 // v1.15: el Muro va dentro de la barra de órdenes; aquí solo queda elegir paradas automáticas o manuales
+$('#hHl').addEventListener('click', () => { S.hlOn = !S.hlOn; S.paused = false; S.hlHold = 0; flash(S.hlOn ? '🎞 MODO RESUMEN: x4 Y FRENA EN LO IMPORTANTE' : 'MODO RESUMEN QUITADO', 1600); renderHud(); updateButtons(); });
+$('#hSkipEnd').addEventListener('click', () => { $('#hudMore').classList.remove('open'); $('#hMore').classList.remove('on'); if (S.race && !S.placeholder && S.race.phase !== 'done' && confirm('¿Simular lo que queda de carrera al instante?')) skipToEnd(); });
 $('#hPits').addEventListener('click', () => {
   S.settings.manualPits = !S.settings.manualPits; saveAll();
   if (S.race) for (const c of S.race.cars) if (c.team.id === mgrTeam()) c.manualStrat = S.settings.manualPits;
@@ -11901,10 +12118,12 @@ function renderHud() {
     if (c.dnf) gap = 'ABA';
     // v1.12: torre estrecha: solo boxes y percances (ataque, defensa y modo adelantamiento se ven en la pista)
     const tag = c.dnf ? '' : c.pit ? '🅿' : c.spin || c.recover || c.off > 0.6 ? '⚠' : '';
+    // v1.18: ❗ con sanción pendiente o investigado por los comisarios (como en la tele)
+    const flag = !c.dnf && ((c.pen || 0) > 0 || c.dtPending || (r.inquiries && r.inquiries.some((q) => q.blame === c.id))) ? '<em class="hpen" title="Sanción pendiente o investigado">!</em>' : '';
     // batería: barrita de 0 a 100 % en pasos de 10 (para no repintar la lista a cada instante); azul claro mientras gasta
     const bat = c.dnf ? '' : `<u class="hb${c.boostOn ? ' on' : ''}"><s style="width:${Math.round((c.bat || 0) * 10) * 10}%"></s></u>`;
     const myT = mgrTeam() || (S.raceMode === 'temporada' && meDrv() ? meDrv().team : null), mine = myT && c.team.id === myT;
-    return `<div data-id="${c.id}" class="${c.id === S.sel ? 'sel' : ''}${mine ? ' mine' : ''}"><b>${i + 1}</b><i style="background:${c.team.color}"></i><span class="hn"${mine ? ` style="color:${readableOn(c.team.color)}"` : ''}>${c.drv.short}</span>${tyreRing(c, 'ht')}${bat}<span class="hg">${tag || gap}</span></div>`;
+    return `<div data-id="${c.id}" class="${c.id === S.sel ? 'sel' : ''}${mine ? ' mine' : ''}"><b>${i + 1}</b><i style="background:${c.team.color}"></i><span class="hn"${mine ? ` style="color:${readableOn(c.team.color)}"` : ''}>${c.drv.short}${flag}</span>${tyreRing(c, 'ht')}${bat}<span class="hg">${tag || gap}</span></div>`;
   }).join('');
   if (hl !== renderHud.last) {
     renderHud.last = hl;
@@ -11920,11 +12139,14 @@ function renderHud() {
     const L = $('#hudList'), vr = $('#view').getBoundingClientRect(), lr = L.classList.contains('off') ? null : L.getBoundingClientRect();
     const right = lr && lr.width ? Math.round(lr.right - vr.left + 6) : 8, V = $('#view');
     V.style.setProperty('--rcL', right + 'px');
-    V.style.setProperty('--rpT', ($('#rcMsg').classList.contains('on') ? 96 : 50) + 'px');
+    V.style.setProperty('--rpT', '50px');
+    const rpE = $('#replay'), rpOn = rpE && !rpE.classList.contains('hidden') && RP.open, rpR = rpOn ? rpE.getBoundingClientRect() : null;
+    V.style.setProperty('--rcT', (rpR && rpR.height ? Math.round(rpR.bottom - vr.top + 6) : 48) + 'px'); // v1.18: con la repetición abierta, el aviso va debajo
     V.style.setProperty('--msgL', (lr && lr.bottom > vr.bottom - 160 ? right : 8) + 'px');
   }
   $('#hPause').textContent = S.paused ? '▶' : '❚❚';
-  $('#hSpeed').textContent = 'x' + S.speed;
+  $('#hSpeed').textContent = S.hlOn ? 'R·x' + (S.hlNow || 4) : 'x' + S.speed;
+  if ($('#hHl')) $('#hHl').innerHTML = `<span>🎞</span>Modo resumen: ${S.hlOn ? 'sí' : 'no'}`;
   $('#hCam').classList.toggle('on', S.cam.mode === 'seguir');
   $('#hNames').classList.toggle('on', S.showNames);
   if (typeof updateSndButtons === 'function') updateSndButtons();
@@ -11933,6 +12155,27 @@ function renderHud() {
 
 // ---------------- Novedades ----------------
 const CHANGELOG = [
+  { v: '1.18', items: [
+    '🎧 Barra de tus pilotos: última vuelta (y la mejor), «si paras ahora: P8, 1,2 s tras GAS» (con aviso de tráfico y de parada barata con safety car), undercut posible al de delante con lo que ganarías, y aviso cuando el de detrás para (cúbrete o haz el overcut)',
+    '🛞 En el desplegable de Box, lo que dura cada goma en este circuito y con tu coche, y si llega al final («Medio · ~6 v ✓ al final» o «faltan 3»)',
+    '🧠 Estrategia automática: con safety car o VSC para si le toca parar pronto (la parada sale a mitad de precio), adelanta la parada si las gomas no llegan a la vuelta prevista, y los buenos estrategas fallan bastante menos que los malos',
+    '📋 Informe del muro al acabar: puestos en la primera vuelta, cada parada (entró P4, salió P7), si salió el undercut, si aprovechaste el safety car y lo que de verdad te costó el reglaje',
+    '🎞 Modo resumen (menú ⋯ o botón «Resumen»): la carrera va a x4 y frena sola a x1 en lo importante (salida, última vuelta, tus pilotos peleando o parando, toques, trompos, safety car)',
+    '🚨 Safety car: frenan con tiempo (antes frenaban de golpe en cada curva) y dejan más hueco; sin roces rueda con rueda con el safety car fuera y los toques hacen menos daño. Al rodear a un coche tocado, frenan hasta tener hueco por el lado: unos 60 % menos de toques con safety car',
+    '🟨 Banderas amarillas también por trompos y coches parados (antes solo con abandonos), con aviso',
+    '🚦 Drive-through: por provocar un accidente (o reincidir) hay que pasar por el carril de boxes en 3 vueltas. Provocar un toque son 5 s (antes 2) y repetir límites de pista, 10 s',
+    '❗ En la lista de la izquierda, una exclamación junto a quien tiene una sanción pendiente o está investigado',
+    '💰 Pilotos que traen patrocinadores (pagan por correr: Stroll, Pérez, Colapinto…) y buenos técnicos (Alonso, Sainz, Hülkenberg, Hamilton…: mejoras más baratas y reglaje más fino)',
+    '🏷 Patrocinadores secundarios (hasta 2): pagan menos que el principal pero suman',
+    '🔩 Piezas de cliente: compras a otro equipo piezas de su coche del año pasado; más baratas y seguras, 2 puntos por debajo de las suyas',
+    '📊 Stats de cualquier piloto (también los del mercado y los de otros equipos) y en el desarrollo, el valor del equipo que tienes justo delante',
+    '🤝 Ofertas por tus pilotos con sentido: solo pujan equipos para los que es una mejora clara y la nota de unas carreras pesa poco (antes Ferrari te mandaba a Leclerc por Stroll)',
+    '🔧 Daños: cuánto te hacen perder por vuelta y lo que cuesta parar a arreglarlos. Reglaje: la sensación en centésimas, con el margen de error de tu ingeniero',
+    '🎚 Dificultad: Normal, Difícil (como estaba, recomendada) o Muy difícil',
+    '📈 Los pilotos aprenden de lo que viven: lluvia, adelantamientos, aguantar ataques, cuidar gomas',
+    '🧹 Menos ruido en los mensajes, pero siempre salen los toques, trompos, salidas de pista, banderas y sanciones',
+    '⏭ «Simular hasta el final» en el menú ⋯ · la repetición ya no sube y baja con los avisos · la bandera roja siempre te deja elegir gomas',
+  ] },
   { v: '1.17', items: [
     '💸 Límite de gasto en el coche según lo lento que sea: el más rápido de la parrilla, 30 M€; uno a 1 s por vuelta, unos 105 M€ (más de lo que puede ganar en una temporada: le frena el dinero, no el límite). Se revisa a mitad de temporada. Los de delante mejoran menos y los de atrás pueden recortar',
     '📊 Las stats mandan más en lo que hace cada piloto: «Ritmo y gomas» (antes no hacía nada) hace gastar menos goma y calentarla antes; la frenada pesa el doble. Medido en vueltas en solitario: curvas rápidas y lentas ±0,35 s cada una, frenada hasta +0,15 s, ritmo y gomas hasta un 10 % menos de desgaste',
@@ -12890,7 +13133,7 @@ function showErasResults(r, res) {
 }
 
 window.__legDbg = { legAfterRace, legSeasonEnd, carRank, legProgress }; // para las pruebas
-window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
+window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice() }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
 
 // ---- salón de la fama: las leyendas con sus récords reales, más lo que hagan en el juego ----
 function famaLegends(F) {
@@ -13181,7 +13424,7 @@ function frame(now) {
   // v1.13: acabada la carrera, tras una vuelta de enfriamiento la pista se queda quieta (antes seguían dando vueltas sin fin)
   const cooled = r && r.phase === 'done' && S.doneAt !== undefined && r.t - S.doneAt > 35;
   if (r && !S.paused && !S.placeholder && !modalOpen && !cooled) {
-    S.acc += rdt * S.speed;
+    S.acc += rdt * effSpeed(r);
     let n = 0;
     // presupuesto de cálculo por fotograma: si el móvil no llega a la velocidad pedida, la carrera va algo más lenta
     // pero la imagen sigue fluida (antes se acumulaba trabajo y daba tirones)
@@ -13206,6 +13449,8 @@ function frame(now) {
       S.lastPhase = r.phase;
     }
   }
+  // v1.18: bandera roja con los coches en la parrilla: elegir gomas (por estado, no por el aviso: así no se escapa a x8 o con repeticiones)
+  if (r && !S.placeholder && !S.exhibition && r.red && r.red.phase === 'grid' && !r.redAsked && (mgrTeam() || (meDrv() && S.raceMode !== 'libre')) && $('#modal').classList.contains('hidden')) { r.redAsked = true; showRedTyres(); }
   if (r && r.phase === 'done' && !S.doneHandled) {
     S.doneHandled = true;
     S.doneAt = r.t;
@@ -14270,6 +14515,7 @@ function newSeason(n, manager, calMode, fresh, grid) {
   if (prev && !fresh && prev.driver && DATA.DRIVERS.some((d) => d.id === prev.driver)) { S.champ.season.driver = prev.driver; S.champ.me = prevMe; }
   if (prev && !fresh) { S.champ.season.faSeen = prev.faSeen || []; S.champ.season.paused = prev.paused || []; S.champ.season.academy = prev.academy || []; }
   S.champ.season.sprints = markSprints(S.champ.season.calendar, S.settings.sprints !== false);
+  S.champ.season.dif = S.settings.dif || 'dificil'; // v1.18
   S.champ.sprints = [];
   if (!keepCareer) { if (S.leg) { S.leg.moved = true; saveLeg(); } S.champ.career = null; career(); } // carrera nueva: sin desbloqueos
   ensureFreeAgents();
@@ -14339,9 +14585,9 @@ function advanceParts(news) {
     const tm = teamById(pt.team); if (!tm) return false;
     const dv = devOf(tm), q = Math.random() + 0.06 * staffK(tm, 'tecnico'); // v1.13: con buen director técnico fallan menos
     // pieza: casi siempre funciona; paquete: más ganancia y más riesgo (a veces no correlaciona con la pista)
-    const amt = pt.kind === 'pieza' ? (q < 0.08 * (1.4 - dv) ? 0 : pt.amt) : q < 0.12 * (1.4 - dv) ? 0 : q < 0.35 ? pt.amt - 1 : q > 0.85 + 0.1 * (1 - dv) ? pt.amt + 1 : pt.amt;
+    const amt = pt.kind === 'cliente' ? pt.amt : pt.kind === 'pieza' ? (q < 0.08 * (1.4 - dv) ? 0 : pt.amt) : q < 0.12 * (1.4 - dv) ? 0 : q < 0.35 ? pt.amt - 1 : q > 0.85 + 0.1 * (1 - dv) ? pt.amt + 1 : pt.amt;
     tm.car[pt.k] = Math.min(99, tm.car[pt.k] + amt);
-    const what = pt.kind === 'paquete' ? 'el paquete' : 'la pieza', nuevo = pt.kind === 'paquete' ? 'nuevo' : 'nueva';
+    const what = pt.kind === 'paquete' ? 'el paquete' : pt.kind === 'cliente' ? 'la pieza de cliente' : 'la pieza', nuevo = pt.kind === 'paquete' ? 'nuevo' : 'nueva';
     if (pt.team === ss.manager) news.push(amt <= 0 ? `🔧 ${what[0].toUpperCase() + what.slice(1)} ${nuevo} de ${CARLBL[pt.k]} no funciona como se esperaba: sin mejora` : `🔧 Llega ${what} de ${CARLBL[pt.k]}: +${amt} (${tm.car[pt.k]})${pt.kind === 'paquete' && amt > pt.amt ? ' ¡mejor de lo esperado!' : ''}`);
     else if (pt.kind === 'paquete' && amt > 0 && raceTeams().includes(tm)) news.push(`🔧 ${tm.name} estrena un paquete de ${CARLBL[pt.k]}: +${amt}`);
     return false;
@@ -14473,7 +14719,8 @@ function afterSeasonRace(rec) {
   for (const tm of raceTeams()) {
     const pts = rec.resultados.filter((x) => x.team === tm.id).reduce((a, x) => a + x.points, 0);
     const sal = DATA.DRIVERS.filter((d) => d.team === tm.id).reduce((a, d) => a + salaryOf(d), 0) + jefeSalary(tm.jefe) + STAFF_K.reduce((a, k) => a + staffSalary(tm.staff && tm.staff[k]), 0);
-    const inc = ECO.base + pts * ECO.perPt - sal; // v1.11: más base y menos por punto (antes 1,5 + 0,25/punto)
+    const pay = DATA.DRIVERS.filter((d) => d.team === tm.id && d.pay).reduce((a, d) => a + d.pay, 0); // v1.18: lo que traen los pilotos de pago
+    const inc = (ECO.base + pts * ECO.perPt) * (tm.id === ss.manager ? difK('inc') : 1) - sal + pay; // v1.11: más base y menos por punto
     ss.budgets[tm.id] = (ss.budgets[tm.id] ?? 60) + inc;
     ss.income[tm.id] = inc;
   }
@@ -14483,8 +14730,13 @@ function afterSeasonRace(rec) {
     const ov = DATA.overall(d.stats);
     if (d.pot === undefined) d.pot = Math.min(99, ov + (d.age < 24 ? 8 : d.age < 27 ? 3 : 0));
     if (d.age < 26 && ov < d.pot && Math.random() < 0.35 * (0.75 + 0.5 * staffK(teamById(d.team), 'ingeniero'))) {
-      const k = rpick(['rapidas', 'lentas', 'frenada', 'consistencia', 'adelantar', 'defender', 'lluvia', 'presion', 'energia', 'salidas', 'rapidas', 'lentas', 'consistencia']);
+      const k = rpick(['rapidas', 'lentas', 'frenada', 'consistencia', 'adelantar', 'defender', 'lluvia', 'presion', 'energia', 'salidas', 'rapidas', 'lentas', 'consistencia', 'ritmo']);
       if (d.stats[k] < 99) { d.stats[k]++; DATA.syncStats(d); news.push(`📈 ${d.name} mejora su ${STATLBL[k]} (${d.stats[k]})`); }
+    }
+    // v1.18: aprenden de lo que viven en carrera (hasta los 31 y sin pasar de su potencial): lluvia, adelantar, defender, gomas
+    if (d.age <= 31 && ov < (d.pot ?? ov + 2) + 2) {
+      const lv = (k, why, pr) => { if (d.stats[k] < 97 && Math.random() < pr) { d.stats[k]++; DATA.syncStats(d); if (d.team === ss.manager || x.pos <= 3) news.push(`📈 ${d.name} aprende ${why}: ${STATLBL[k]} ${d.stats[k]}`); return true; } return false; };
+      (rec.mojado && !x.dnf && lv('lluvia', 'corriendo con lluvia', 0.22)) || ((x.overtakes || 0) >= 3 && lv('adelantar', `de sus ${x.overtakes} adelantamientos`, 0.18)) || ((x.defendHolds || 0) >= 3 && lv('defender', 'aguantando ataques', 0.15)) || (!x.dnf && (x.stops || 0) <= 1 && rec.vueltas >= 8 && lv('ritmo', 'cuidando las gomas', 0.06));
     }
     if (d.age >= 34 && Math.random() < 0.12) {
       const k = rpick(['rapidas', 'lentas', 'frenada']);
@@ -14492,7 +14744,7 @@ function afterSeasonRace(rec) {
     }
   }
   meAfterRace(rec, news);
-  { const sp = sponsorRace(rec, news); if (ss.manager && sp) ss.income[ss.manager] = (ss.income[ss.manager] || 0) + sp; }
+  { const sp = sponsorRace(rec, news) + sponsor2Race(rec, news); if (ss.manager && sp) ss.income[ss.manager] = (ss.income[ss.manager] || 0) + sp; }
   aiDevelop(news);
   if (S.champ.races.length === 1 && regsNext()) news.push('📜 El año que viene cambia el reglamento: los coches se van a reordenar. Lo que inviertas en el coche nuevo (oficina → Desarrollo) contará el doble');
   if (ss.pool.filter((d) => !d.freeAgent).length < 10 && Math.random() < 0.5) ss.pool.push(DATA.makeDriver({}));
@@ -14531,7 +14783,10 @@ const devSpent = (id) => devState().spent[id] || 0;
 const devLeft = (id) => { const ss = S.champ.season, frac = ss ? Math.min(1, (S.champ.races.length + 4) / Math.max(1, ss.n)) : 1; return Math.max(0, Math.round((devCapOf(id) * frac - devSpent(id)) * 10) / 10); };
 const devTotalLeft = (id) => Math.max(0, devCapOf(id) - devSpent(id));
 // pieza: +1, barata, llega a la siguiente carrera y casi siempre funciona; paquete: +3, cara, tarda 2–3 carreras y puede salir mejor o peor
-function devCost(tm, k, kind) { const c = upCostTm(tm, k) * (1.12 - 0.25 * staffK(tm, 'tecnico')); return Math.round((kind === 'paquete' ? c * 1.6 : c * 0.45) * 10) / 10; } // v1.13: el director técnico abarata
+// v1.18: pilotos buenos técnicos: con uno, las mejoras salen un 8 % más baratas (con dos, un 15 %) y el reglaje se afina mejor
+const techN = (tm) => Math.min(2, DATA.DRIVERS.filter((d) => d.team === (tm && tm.id) && d.tech).length);
+const techK = (tm) => 1 - 0.075 * techN(tm);
+function devCost(tm, k, kind) { const c = upCostTm(tm, k) * (1.12 - 0.25 * staffK(tm, 'tecnico')) * techK(tm); return Math.round((kind === 'paquete' ? c * 1.6 : c * 0.45) * 10) / 10; } // v1.13: el director técnico abarata
 function devOrder(tm, k, kind) {
   const ss = S.champ.season, cost = devCost(tm, k, kind), D = devState();
   if (cost > (ss.budgets[tm.id] ?? 0) || cost > devLeft(tm.id)) return null;
@@ -14557,7 +14812,7 @@ function aiDevelop(news) {
     if (devLeft(tm.id) < 2 || b < 8) continue;
     if (devSpent(tm.id) > devCapOf(tm.id) * Math.min(1, frac + 0.12) && Math.random() < 0.7) continue; // v1.16: van gastando a lo largo de la temporada, no todo al principio
     if (frac > 0.6 && Math.random() < 0.25 * (regsNext() ? 2 : 1)) { const amt = Math.min(6, devLeft(tm.id), b * 0.2); if (amt >= 2 && devNext(tm, Math.round(amt))) continue; }
-    if (Math.random() > 0.22 + 0.2 * dv) continue;
+    if (Math.random() > (0.22 + 0.2 * dv) * difK('ai')) continue;
     const ks = Object.keys(CARLBL).filter((k) => k !== 'desarrollo' && tm.car[k] < 97).sort((a, c) => tm.car[a] - tm.car[c]).slice(0, 3);
     const k = rpick(ks), kind = b > 30 && Math.random() < 0.4 ? 'paquete' : 'pieza';
     devOrder(tm, k, kind);
@@ -14604,10 +14859,16 @@ function liveMarket(rec, news) {
   const ss = S.champ.season, M = ss.manager;
   ss.offers = (ss.offers || []).filter((o) => o.until > S.champ.races.length && DATA.DRIVERS.some((d) => d.id === o.driver && d.team === M));
   // oferta por uno de tus pilotos si está rindiendo y un rico lo quiere
+  // v1.18: solo pujan equipos para los que tu piloto es una mejora clara sobre su peor piloto (la nota de las carreras ayuda,
+  // pero poco: antes Ferrari ofrecía dinero por Stroll y te mandaba a Leclerc por unas pocas carreras buenas)
   if (M && Math.random() < 0.12 && !ss.offers.length) {
-    const mine = DATA.DRIVERS.filter((d) => d.team === M && !d.legend);
-    const st = standings(), best = mine.sort((a, c) => st.drivers.findIndex((x) => x.id === a.id) - st.drivers.findIndex((x) => x.id === c.id))[0];
-    const rich = DATA.TEAMS.filter((t) => t.id !== M && (ss.budgets[t.id] ?? 0) > 30 && raceTeams().includes(t)).sort((a, c) => (ss.budgets[c.id] ?? 0) - (ss.budgets[a.id] ?? 0))[0];
+    const val = (d) => { const rt = S.champ.races.length >= 3 ? ratingAvg(d.id) : null; return DATA.overall(d.stats) + (rt === null ? 0 : clampN((rt - 6.5) * 1.2, -3, 3)); };
+    const mine = DATA.DRIVERS.filter((d) => d.team === M && !d.legend && !d.me);
+    let best = null, rich = null;
+    for (const d of mine.sort((a, c) => val(c) - val(a))) {
+      const bidders = DATA.TEAMS.filter((t) => t.id !== M && raceTeams().includes(t) && (ss.budgets[t.id] ?? 0) > feeOf(d) * 1.2 + 10).filter((t) => { const w = DATA.DRIVERS.filter((x) => x.team === t.id).sort((a, c) => val(a) - val(c))[0]; return w && !w.legend && val(d) >= val(w) + 3; });
+      if (bidders.length) { best = d; rich = bidders.sort((a, c) => (ss.budgets[c.id] ?? 0) - (ss.budgets[a.id] ?? 0))[0]; break; }
+    }
     if (best && rich) { const amt = Math.round(feeOf(best) * (1.1 + Math.random() * 0.5) * 10) / 10; ss.offers.push({ driver: best.id, team: rich.id, amount: amt, until: S.champ.races.length + 2 }); news.push(`📨 ${rich.name} ofrece ${money(amt)} por ${best.name}: decide en la oficina (pestaña Mercado)`); }
   }
   // rumores (a veces se cumplen al final de la temporada)
@@ -15066,7 +15327,7 @@ function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 function setupEst(T, tm, id) {
   const tr = setupTrue(T), ov = Math.round(Math.max(tm && tm.jefe ? DATA.stratOverall(tm.jefe) : 70, staffLvl(tm, 'ingeniero'))); // v1.13: el ingeniero de pista también afina
   const yr = (S.champ && S.champ.season && S.champ.season.year) || 0, rng = SIM.makeRng(hashStr((tm ? tm.id : '') + '|' + id + '|' + yr));
-  const err = Math.max(0, (96 - ov) / 100) * 30;
+  const err = Math.max(0, (96 - ov) / 100) * 30 * (1 - 0.25 * techN(tm));
   return { a: SIM.clamp(tr.a + (rng() * 2 - 1) * err, 5, 98), u: SIM.clamp(tr.u + (rng() * 2 - 1) * err, 5, 95), aW: SIM.clamp(tr.aW + (rng() * 2 - 1) * err, 5, 99), uW: SIM.clamp(tr.uW + (rng() * 2 - 1) * err, 3, 95), ov };
 }
 // cuánta lluvia se espera (0 seco … 1 lluvia toda la carrera), según la previsión
@@ -15121,8 +15382,10 @@ function setupSheetHTML(T, id, laps) {
     <div class="row"><button class="btn ghost" id="suReset">Volver al recomendado (${ms.best.name})</button></div>`;
 }
 function setupFeelHTML(T, id, laps) {
-  const ms = mySetup(T, id, laps), m = setupMix(ms.e, ms.w), l = setupLoss(ms.a, ms.u, m.a, m.u), [lab, col] = setupFeel(l);
-  return `<div class="l">Sensación de los pilotos <b style="color:${col}">${lab}</b></div><div class="of-bar"><i style="width:${Math.round(100 * Math.max(0.04, 1 - l / 0.035))}%;background:${col}"></i></div><small>${setupSec(T, l) < 0.03 ? 'Según tu ingeniero, no se puede hacer mucho mejor' : `Según tu ingeniero, ≈ ${setupSec(T, l).toFixed(2).replace('.', ',')} s por vuelta más lento que el reglaje ideal`}</small>`;
+  const ms = mySetup(T, id, laps), m = setupMix(ms.e, ms.w), l = setupLoss(ms.a, ms.u, m.a, m.u), [lab, col] = setupFeel(l), sec = setupSec(T, l);
+  // v1.18: en centésimas siempre, en una barra de 0 a 0,5 s, con el margen de error de tu ingeniero
+  const err = Math.max(0, (96 - ms.e.ov) / 100) * 30, mErr = setupSec(T, setupLoss(m.a + err * 0.6, m.u + err * 0.6, m.a, m.u));
+  return `<div class="l">Sensación de los pilotos <b style="color:${col}">${lab}</b> · <b>${sec < 0.005 ? 'clavado' : '≈ ' + sec.toFixed(2).replace('.', ',') + ' s por vuelta'}</b></div><div class="of-bar"><i style="width:${Math.round(100 * Math.max(0.03, 1 - sec / 0.5))}%;background:${col}"></i></div><small>Lo que se pierde respecto al reglaje ideal de <b>tu</b> coche en este circuito (no te compara con los rivales), según tu ingeniero${mErr >= 0.01 ? `, que puede equivocarse en unas ±${mErr.toFixed(2).replace('.', ',')} s` : ''}.</small>`;
 }
 function setupTileTxt(T, id, laps) {
   const ms = mySetup(T, id, laps); if (!ms) return null;
@@ -15539,6 +15802,10 @@ function ratingAvg(id) {
 const ratingCol = (n) => (n >= 8 ? 'var(--go)' : n >= 6.5 ? 'var(--text)' : n >= 5 ? 'var(--gold)' : 'var(--bad)');
 // ---------------- v1.11 · economía: base por carrera y premio final por puesto ----------------
 const ECO = { base: 3.5, perPt: 0.1 };
+// v1.18: dificultad (por defecto «Difícil», que es como estaba el juego): dinero que ganas, lo que desarrollan los rivales
+// y lo bien que eligen la estrategia sus estrategas
+const DIF = { normal: { inc: 1.2, ai: 0.8, aiNoise: 1.4, name: 'Normal' }, dificil: { inc: 1, ai: 1, aiNoise: 1, name: 'Difícil' }, muydificil: { inc: 0.85, ai: 1.2, aiNoise: 0.65, name: 'Muy difícil' } };
+const difK = (k) => { const ss = S.champ && S.champ.season, d = (ss && ss.dif) || 'dificil'; return (DIF[d] || DIF.dificil)[k]; };
 function ecoPrize(pos, n, races) { return Math.round((15 + (n - pos) * 2.5) * Math.max(0.35, Math.min(1, (races || 24) / 24)) * 10) / 10; }
 // ---------------- v1.10 · Tu escudería desde cero (clase baja, media o alta) y patrocinadores ----------------
 const OWN_ID = 'propia';
@@ -15657,6 +15924,26 @@ function sponsorTxt(o) {
   if (o.perWin) p.push(`${money(o.perWin)} por victoria`);
   if (o.goal) p.push(`${money(o.bonus)} si acabas ${o.goal === 1 ? 'primero' : 'entre los ' + o.goal + ' primeros'} de escuderías`);
   return p.join(' · ');
+}
+// v1.18: patrocinadores secundarios: hasta 2, pagan menos que el principal pero suman
+const SPONSORS2 = ['Pirelli Store', 'Kingspan', 'Globant', 'Socar', 'Puma', 'Logitech', 'Estrella Galicia', 'Bitpanda', 'Tommy Hilfiger', 'Snapdragon', 'IBM', 'Bose'];
+function sponsor2Offers() {
+  const ss = S.champ.season; if (!ss.manager) return [];
+  if (ss.sponsor2Offers) return ss.sponsor2Offers;
+  const ts = raceTeams(), me = teamById(ss.manager), rk = me ? 1 + ts.filter((t) => t !== me && teamStrength(t) > teamStrength(me)).length : ts.length;
+  const q = 1.2 - 0.5 * ((rk - 1) / Math.max(1, ts.length - 1));
+  ss.sponsor2Offers = SPONSORS2.slice().sort(() => Math.random() - 0.5).slice(0, 4).map((name, i) => {
+    const r = (a) => Math.round(a * q * (0.85 + Math.random() * 0.3) * 100) / 100;
+    return i % 2 ? { name, perPt: r(0.05) } : { name, perRace: r(0.6) };
+  });
+  return ss.sponsor2Offers;
+}
+function sponsor2Race(rec, news) {
+  const ss = S.champ.season, M = ss.manager; if (!M || !ss.sponsors2 || !ss.sponsors2.length) return 0;
+  const pts = rec.resultados.filter((x) => x.team === M).reduce((a, x) => a + (x.points || 0), 0);
+  const amt = ss.sponsors2.reduce((a, o) => a + (o.perRace || 0) + (o.perPt || 0) * pts, 0);
+  ss.budgets[M] = (ss.budgets[M] ?? 0) + amt;
+  return amt;
 }
 function sponsorPick(i) { const ss = S.champ.season, o = sponsorOffers()[i]; if (!o || ss.sponsor) return; ss.sponsor = o; if (o.sign) ss.budgets[ss.manager] = (ss.budgets[ss.manager] ?? 0) + o.sign; }
 // lo que paga el patrocinador en cada carrera (y el premio por objetivo, al final)
@@ -15843,6 +16130,8 @@ function showSeasonSetup() {
       <div class="row"><span class="k">Modo</span><div class="seg"><button class="btn on">🏆 Temporada</button><button class="btn" id="toFree">🏁 Carrera suelta</button></div></div>
       <div class="row"><span class="k">Carreras</span><div class="seg">${[6, 10, 14, 20, 24].map((k) => `<button class="btn ${k === n ? 'on' : ''}" data-n="${k}">${k}</button>`).join('')}</div></div>
       <div class="row"><span class="k">Sprints (carrera corta el día antes en algunos fines de semana, puntos para los 8 primeros)</span><div class="seg"><button class="btn ${S.settings.sprints !== false ? 'on' : ''}" data-spr="1">⚡ Sí</button><button class="btn ${S.settings.sprints === false ? 'on' : ''}" data-spr="0">No</button></div></div>
+      <div class="row"><span class="k">Dificultad</span><div class="seg">${Object.entries(DIF).map(([k, d]) => `<button class="btn ${(S.settings.dif || 'dificil') === k ? 'on' : ''}" data-dif="${k}">${d.name}${k === 'dificil' ? ' (recomendada)' : ''}</button>`).join('')}</div></div>
+      <div class="note" style="margin-top:2px">${{ normal: 'Ganas algo más de dinero y los rivales desarrollan y eligen la estrategia peor.', dificil: 'Como F1: los buenos equipos desarrollan y los buenos estrategas aciertan.', muydificil: 'Ganas menos, los rivales desarrollan más y sus estrategas casi no fallan.' }[S.settings.dif || 'dificil']}</div>
       <div class="row"><span class="k">Calendario</span><div class="seg"><button class="btn ${cal === 'real' ? 'on' : ''}" data-cal="real">🏁 Orden del Mundial</button><button class="btn ${cal === 'azar' ? 'on' : ''}" data-cal="azar">🎲 Al azar</button></div>
         <button class="btn ghost" id="ssPool">🎯 Elegir circuitos (${trackPool().length})</button></div>
       <div class="note" style="margin-top:4px">${cal === 'real' ? `Los circuitos reales en el orden del calendario (Melbourne → Abu Dabi)${n < 24 ? '; con menos de 24 carreras se reparten a lo largo del año' : ''}.` : 'Circuitos al azar entre los que tengas elegidos.'}</div>
@@ -15860,6 +16149,7 @@ function showSeasonSetup() {
     $$('#mbox [data-cal]').forEach((b) => (b.onclick = () => { cal = b.dataset.cal; mgr = $('#ssMgr').value; render(); }));
     $$('#mbox [data-spr]').forEach((b) => (b.onclick = () => { S.settings.sprints = b.dataset.spr === '1'; mgr = $('#ssMgr').value; render(); }));
     $$('#mbox [data-fresh]').forEach((b) => (b.onclick = () => { fresh = b.dataset.fresh === '1'; mgr = $('#ssMgr').value; render(); }));
+    $$('#mbox [data-dif]').forEach((b) => (b.onclick = () => { S.settings.dif = b.dataset.dif; saveAll(); mgr = $('#ssMgr').value; render(); }));
     $$('#mbox [data-grid]').forEach((b) => (b.onclick = () => { grid = b.dataset.grid; mgr = $('#ssMgr').value; render(); }));
     $('#ssPool').onclick = () => { mgr = $('#ssMgr').value; showTrackPool(render); };
     $('#toFree').onclick = () => { S.settings.mode = 'libre'; saveAll(); showPreRace(); };
@@ -15871,6 +16161,37 @@ function showSeasonSetup() {
     pwWrap(showHome);
   };
   render();
+}
+// v1.18: piezas de cliente: comprar a un equipo de delante piezas de su coche del año pasado (como Haas o Racing Bulls).
+// Más baratas que desarrollarlas, llegan a la carrera siguiente y funcionan seguro, pero se quedan 2 puntos por debajo
+// de las suyas. Una vez por área y temporada; cuentan para el límite de gasto
+function clientOffer(tm, k) {
+  const ss = S.champ.season; if ((ss.client || {})[k] || (ss.parts || []).some((x) => x.team === tm.id && x.k === k)) return null;
+  const v = tm.car[k] || 70, src = raceTeams().filter((t) => t !== tm).sort((a, c) => (c.car[k] || 0) - (a.car[k] || 0))[0];
+  if (!src) return null;
+  const gain = Math.min(4, (src.car[k] || 0) - 2 - v); if (gain < 1) return null;
+  return { src, gain, cost: Math.round(gain * upCost(v) * 0.4 * 10) / 10 };
+}
+function clientHTML(tm, b) {
+  const rows = ['potencia', 'carga', 'eficiencia', 'neumaticos', 'fiabilidad'].map((k) => [k, clientOffer(tm, k)]).filter(([, o]) => o);
+  if (!rows.length) return '';
+  const left = devLeft(tm.id);
+  return `<h3>Piezas de cliente</h3><div class="note">Compras a otro equipo piezas de su coche del año pasado: más baratas que desarrollarlas, llegan a la carrera siguiente y funcionan seguro, pero se quedan 2 puntos por debajo de las suyas. Una vez por área y temporada.</div>
+    <div class="of-act">${rows.map(([k, o]) => `<button class="btn ghost" data-client="${k}" ${o.cost <= b && o.cost <= left ? '' : 'disabled'}>${CARLBL[k]} de ${esc(o.src.name.split(' ')[0])}: +${o.gain} · ${money(o.cost)}</button>`).join('')}</div>`;
+}
+function clientBuy(tm, k) {
+  const ss = S.champ.season, o = clientOffer(tm, k); if (!o) return false;
+  if (o.cost > (ss.budgets[tm.id] ?? 0) || o.cost > devLeft(tm.id)) return false;
+  const D = devState();
+  ss.budgets[tm.id] -= o.cost; D.spent[tm.id] = devSpent(tm.id) + o.cost;
+  (ss.client = ss.client || {})[k] = o.src.id;
+  (ss.parts = ss.parts || []).push({ team: tm.id, k, amt: o.gain, left: 1, kind: 'cliente' });
+  return o;
+}
+// v1.18: stats de un piloto (desplegable) para fichar sabiendo lo que hay
+function statsDetails(d) {
+  if (!d || !d.stats) return '';
+  return `<details class="of-st"><summary>📊 Stats</summary><div class="bars">${STAT_NAMES.map(([k, l]) => d.stats[k] === undefined ? '' : `<span>${l}</span><div class="bar"><i style="width:${d.stats[k]}%"></i></div><span class="v">${d.stats[k]}</span>`).join('')}</div></details>`;
 }
 // oficina del director (modo manager)
 function showOffice() {
@@ -15885,7 +16206,7 @@ function showOffice() {
   const prevBody = $('#mbox.pw-screen .of-sec') ? $('#mbox .pw-body').scrollTop : null, prevTab = S.ofTabShown;
   const drvCard = (d, extra) => { const ov = DATA.overall(d.stats); return `<div class="of-card"><div class="of-ch"><span class="fl">${DATA.flagOf(d.nat)}</span><div><b>${esc(d.name)}</b> ${rarBadge(d)}<small>${d.age} años${d.pot ? ' · potencial ' + d.pot : ''} · sueldo ${money(salaryOf(d))}/carrera${ratingAvg(d.id) !== null ? ' · nota media ' + String(ratingAvg(d.id)).replace('.', ',') : ''}</small></div><span class="of-ov">${ov}</span></div>
     ${d.team ? `<div class="of-cm">${moralTxt(d.moral)} (${d.moral ?? 70}) · contrato: ${(d.contract ?? 1) <= 1 ? '<b style="color:var(--gold)">acaba esta temporada</b>' : `${d.contract} temporadas`}</div>` : ''}
-    <div class="traits">${traitChips(d, true)}</div>${extra || ''}</div>`; };
+    <div class="traits">${traitChips(d, true)}${d.pay ? `<span class="trait" title="Sus patrocinadores pagan por cada carrera que corre">💰 Trae ${money(d.pay)}/carrera</span>` : ''}${d.tech ? '<span class="trait" title="Ayuda a los ingenieros: mejoras más baratas y reglaje más fino">🧠 Buen técnico</span>' : ''}</div>${statsDetails(d)}${extra || ''}</div>`; };
   const jefeCard = (j, extra) => `<div class="of-card"><div class="of-ch"><span class="fl">🎧</span><div>${jefeBadge(j)}<small>sueldo ${money(jefeSalary(j))}/carrera</small></div><span class="of-ov">${DATA.stratOverall(j)}</span></div>${jefeBars(j)}${extra || ''}</div>`;
   const inc = ss.income[tm.id], goal = ss.goals && ss.goals[tm.id], pos = standings().teams.findIndex((x) => x.id === tm.id) + 1;
   const offers = (ss.offers || []).filter((o) => DATA.DRIVERS.some((d) => d.id === o.driver && d.team === tm.id));
@@ -15898,9 +16219,11 @@ function showOffice() {
     const row = ([k, l]) => {
       const pt = (ss.parts || []).find((x) => x.team === tm.id && x.k === k), v = tm.car[k];
       const best = Math.max(...rivals.map((t) => t.car[k] || 0)), rank = 1 + rivals.filter((t) => (t.car[k] || 0) > v).length;
+      // v1.18: el que tienes justo delante en esa área (al que puedes aspirar a alcanzar)
+      const ahead = rivals.filter((t) => (t.car[k] || 0) > v).sort((a, c) => (a.car[k] || 0) - (c.car[k] || 0))[0];
       const cP = devCost(tm, k, 'pieza'), cK = devCost(tm, k, 'paquete');
       const can = (c) => c <= b && c <= left && v < 97;
-      return `<div class="of-cr dv"><div class="l"><span>${l[0].toUpperCase() + l.slice(1)}</span><b>${v}</b><em class="rk">${rank}.º · mejor rival ${best}</em></div>
+      return `<div class="of-cr dv"><div class="l"><span>${l[0].toUpperCase() + l.slice(1)}</span><b>${v}</b><em class="rk">${rank}.º${ahead ? ` · delante ${esc(ahead.name.split(' ')[0])} ${ahead.car[k]}` : ''} · mejor ${best}</em></div>
         <div class="of-bar"><i style="width:${Math.max(0, (v - 50) * 2)}%"></i><u style="left:${Math.max(0, (best - 50) * 2)}%"></u></div>
         ${pt ? `<em>🔧 ${pt.kind === 'paquete' ? 'paquete' : 'pieza'} en camino: llega en ${pt.left} carrera${pt.left === 1 ? '' : 's'}</em>` : `<div class="dv-b"><button class="btn ghost" data-dev="${k}|pieza" ${can(cP) ? '' : 'disabled'}>Pieza +1 · ${money(cP)}</button><button class="btn ghost" data-dev="${k}|paquete" ${can(cK) ? '' : 'disabled'}>Paquete +3 · ${money(cK)}</button></div>`}</div>`;
     };
@@ -15909,6 +16232,7 @@ function showOffice() {
       <div class="note">Tu límite depende de lo lento que es tu coche: el más rápido de la parrilla solo puede gastar 30 M€; uno a un segundo por vuelta, unos 105 M€ (se revisa a mitad de temporada). El dinero se va liberando carrera a carrera.</div>
       <div class="note">Pieza: +1, llega a la carrera siguiente y casi siempre funciona. Paquete: +3, tarda 2–3 carreras y puede salir mejor o no funcionar${tm.jefe && tm.jefe.perk === 'desarrollo' ? ' (con Newey, menos riesgo y antes)' : ''}. La marca blanca de cada barra es el mejor rival.</div>
       <div class="of-car2">${Object.entries(CARLBL).filter(([k]) => k !== 'desarrollo').map(row).join('')}${row(['desarrollo', CARLBL.desarrollo])}</div>
+      ${clientHTML(tm, b)}
       <h3>Coche del año que viene</h3>
       <div class="note">Lo que inviertas ahora no mejora este coche, pero sí el del año que viene (y el doble si cambia el reglamento). Llevas ${money(nxt)}.</div>
       <div class="of-act">${[3, 6, 10].map((a) => `<button class="btn ghost" data-next="${a}" ${a <= b && a <= left ? '' : 'disabled'}>+${a} M€ al coche nuevo</button>`).join('')}</div>
@@ -15918,6 +16242,10 @@ function showOffice() {
   else if (tab === 'patro') {
     sec = ss.sponsor ? `<div class="of-card offer"><b>💼 ${esc(ss.sponsor.name)}</b><div class="muted" style="font-size:13px;margin-top:4px">${sponsorTxt(ss.sponsor)}</div></div><div class="note">El patrocinador se elige al empezar cada temporada; las ofertas son mejores cuanto mejor es tu equipo.</div>`
       : `<div class="note">Elige patrocinador para esta temporada. Cuanto mejor es tu equipo, mejores ofertas. (Nombres reales, solo como texto.)</div><div class="of-list">${sponsorOffers().map((o, i) => `<div class="of-card"><b>💼 ${esc(o.name)}</b><div class="muted" style="font-size:13px;margin:4px 0 8px">${sponsorTxt(o)}</div><div class="of-act"><button class="btn ghost" data-spons="${i}">Firmar con ${esc(o.name)}</button></div></div>`).join('')}</div>`;
+    // v1.18: secundarios (hasta 2)
+    const s2 = ss.sponsors2 || [];
+    sec += `<h3>Patrocinadores secundarios <small class="muted">${s2.length}/2</small></h3><div class="note">Pagan bastante menos que el principal, pero suman. Hasta dos por temporada.</div>
+      <div class="of-list">${sponsor2Offers().map((o, i) => { const on = s2.some((x) => x.name === o.name); return `<div class="of-card${on ? ' offer' : ''}"><b>🏷 ${esc(o.name)}</b><div class="muted" style="font-size:13px;margin:4px 0 8px">${o.perRace ? money(o.perRace) + ' por carrera' : money(o.perPt) + ' por punto'}</div>${on ? '<div class="muted">✓ Firmado</div>' : `<div class="of-act"><button class="btn ghost" data-spons2="${i}" ${s2.length >= 2 ? 'disabled' : ''}>Firmar</button></div>`}</div>`; }).join('')}</div>`;
   }
   else if (tab === 'cantera') {
     const A = acad(), cands = acadCandidates();
@@ -15926,7 +16254,9 @@ function showOffice() {
       <h3>Jóvenes en el mercado</h3>
       <div class="of-list">${cands.map((d) => drvCard(d, `<div class="of-act"><button class="btn ghost" data-acsign="${d.id}" ${A.length >= ACAD_MAX || acadFee(d) > b ? 'disabled' : ''}>A la cantera · ${money(acadFee(d))}</button></div>`)).join('') || '<div class="muted">No hay jóvenes libres ahora mismo.</div>'}</div>`;
   }
-  else if (tab === 'pilotos') sec = `<div class="note">Puedes cambiar de piloto en cualquier momento de la temporada: en «🔁 Mercado» eliges al nuevo y a cuál de los tuyos sustituye (el que sale pasa al mercado).</div><div class="of-list">${mine.map((d) => drvCard(d, `<div class="of-act">${(d.contract ?? 1) <= 1 ? `<button class="btn ghost" data-renew="${d.id}" ${renewCost(d) > b ? 'disabled' : ''}>Renovar 2 temporadas · ${money(renewCost(d))}</button>` : ''}<button class="btn ghost" data-oftab="mercado">🔁 Sustituirlo</button></div>`)).join('')}</div>`;
+  else if (tab === 'pilotos') sec = `<div class="note">Puedes cambiar de piloto en cualquier momento de la temporada: en «🔁 Mercado» eliges al nuevo y a cuál de los tuyos sustituye (el que sale pasa al mercado).</div><div class="of-list">${mine.map((d) => drvCard(d, `<div class="of-act">${(d.contract ?? 1) <= 1 ? `<button class="btn ghost" data-renew="${d.id}" ${renewCost(d) > b ? 'disabled' : ''}>Renovar 2 temporadas · ${money(renewCost(d))}</button>` : ''}<button class="btn ghost" data-oftab="mercado">🔁 Sustituirlo</button></div>`)).join('')}</div>
+    <h3>El resto de la parrilla</h3><div class="note">Para comparar: media, nota en carrera y stats de cada uno (toca «📊 Stats»).</div>
+    <div class="of-list">${raceTeams().filter((t) => t.id !== tm.id).map((t) => DATA.DRIVERS.filter((d) => d.team === t.id).map((d) => drvCard(d, `<div class="muted" style="font-size:12px">${esc(t.name)}</div>`)).join('')).join('')}</div>`;
   else if (tab === 'muro') sec = `<h3>Tu jefe de estrategia</h3><div class="of-list">${tm.jefe ? jefeCard(tm.jefe) : '<div class="muted">Sin jefe de estrategia.</div>'}</div>
     <h3>Estrategas libres</h3><div class="of-list">${(ss.staffPool || []).map((j, i) => jefeCard(j, `<div class="of-act"><button class="btn ghost" data-jefe="${i}" ${jefeFee(j) > b ? 'disabled' : ''}>Fichar · ${money(jefeFee(j))}</button></div>`)).join('') || '<div class="muted">No hay estrategas libres ahora mismo.</div>'}</div>
     <div class="note">Los estrategas legendarios (Brawn, Newey…) están en la pestaña Leyendas.</div>`;
@@ -15955,8 +16285,10 @@ function showOffice() {
   $$('#mbox [data-oftab]').forEach((x) => (x.onclick = () => { S.ofTab = x.dataset.oftab; showOffice(); }));
   officeLegendsWire(tm, showOffice);
   $$('#mbox [data-sthire]').forEach((x) => (x.onclick = async () => { const r = staffHire(tm, +x.dataset.sthire); flash(r === 'ok' ? 'CONTRATADO' : 'NO HAY DINERO', 1200); await saveAll(); saveRoster(); showOffice(); }));
+  $$('#mbox [data-spons2]').forEach((x) => (x.onclick = async () => { const o = sponsor2Offers()[+x.dataset.spons2]; ss.sponsors2 = ss.sponsors2 || []; if (o && ss.sponsors2.length < 2 && !ss.sponsors2.some((q) => q.name === o.name)) { ss.sponsors2.push(o); flash(`FIRMADO CON ${o.name.toUpperCase()}`, 1200); } await saveAll(); showOffice(); }));
   $$('#mbox [data-spons]').forEach((x) => (x.onclick = async () => { sponsorPick(+x.dataset.spons); flash(`FIRMADO CON ${ss.sponsor.name.toUpperCase()}`, 1400); await saveAll(); showOffice(); }));
   $$('#mbox [data-dev]').forEach((x) => (x.onclick = async () => { const [k, kind] = x.dataset.dev.split('|'); const left = devOrder(tm, k, kind); if (left) flash(`${kind === 'paquete' ? 'PAQUETE' : 'PIEZA'} ENCARGADO: LLEGA EN ${left} CARRERA${left === 1 ? '' : 'S'}`, 1400); await saveRoster(); await saveAll(); showOffice(); }));
+  $$('#mbox [data-client]').forEach((x) => (x.onclick = async () => { const o = clientBuy(tm, x.dataset.client); if (o) flash(`PIEZAS DE ${o.src.name.toUpperCase()}: LLEGAN A LA SIGUIENTE CARRERA`, 1600); await saveRoster(); await saveAll(); showOffice(); }));
   $$('#mbox [data-next]').forEach((x) => (x.onclick = async () => { if (devNext(tm, +x.dataset.next)) flash('INVERTIDO EN EL COCHE NUEVO', 1200); await saveAll(); showOffice(); }));
   $$('#mbox [data-offer]').forEach((x) => (x.onclick = async () => {
     const [id, yes] = x.dataset.offer.split('|'), o = (ss.offers || []).find((q) => q.driver === id); if (!o) return;
@@ -16086,7 +16418,7 @@ async function boot() {
   if (ct && Array.isArray(ct.tracks)) S.customTracks = ct.tracks;
   const se = await Store.load('ajustes.json');
   if (se && se.laps) S.settings = Object.assign(S.settings, { laps: se.laps, grid: se.grid || 'quali', brain: se.brain || 'reglas', weather: se.wxV === 2 ? se.weather || 'real' : 'real', temp: se.wxV === 2 ? se.temp || 'real' : 'real', wxV: 2, wear: se.wear || 'normal', circuit: se.circuit || 'aleatorio', cars: Math.max(2, Math.min(MAX_CARS, se.cars || 8)), qMode: se.qMode || 'ver1', mode: se.mode || 'temporada', trackPool: Array.isArray(se.trackPool) ? se.trackPool : null, equalCars: !!se.equalCars, manualPits: !!se.manualPits, gl: se.glV === 3 ? se.gl !== false : true, glV: 3, // v1.12: WebGL por defecto (si el aparato no puede, se usa el dibujo normal)
-    autoFull: se.autoFull !== false, marker: ['led', 'flecha', 'circulo'].includes(se.marker) ? se.marker : 'led', perfBox: !!se.perfBox, msgLevel: MSG_MIN[se.msgLevel] !== undefined ? se.msgLevel : 'importantes', cores: ['uno', 'dos', 'cuatro'].includes(se.cores) ? se.cores : se.coresV === 13 && se.cores === 'todos' ? 'todos' : 'cuatro', coresV: 13, plugOnly: !!se.plugOnly, autoBest: se.autoBest !== false, sprints: se.sprints !== false, camOpen: !!se.camOpen, camMode: se.camMode === 'rep' ? 'rep' : 'live', autoRep: se.autoRep !== false, sound: se.sound !== false, vol: typeof se.vol === 'number' ? se.vol : 0.7, celebrate: se.celebrate !== false });
+    autoFull: se.autoFull !== false, marker: ['led', 'flecha', 'circulo'].includes(se.marker) ? se.marker : 'led', perfBox: !!se.perfBox, msgLevel: MSG_MIN[se.msgLevel] !== undefined ? se.msgLevel : 'importantes', cores: ['uno', 'dos', 'cuatro'].includes(se.cores) ? se.cores : se.coresV === 13 && se.cores === 'todos' ? 'todos' : 'cuatro', coresV: 13, plugOnly: !!se.plugOnly, autoBest: se.autoBest !== false, sprints: se.sprints !== false, camOpen: !!se.camOpen, camMode: se.camMode === 'rep' ? 'rep' : 'live', autoRep: se.autoRep !== false, sound: se.sound !== false, vol: typeof se.vol === 'number' ? se.vol : 0.7, celebrate: se.celebrate !== false, dif: ['normal', 'dificil', 'muydificil'].includes(se.dif) ? se.dif : 'dificil' });
   // v0.9.1: circuitos nuevos del calendario actual → entran en la selección guardada
   if (se && (se.poolV || 0) < 2 && Array.isArray(S.settings.trackPool)) S.settings.trackPool = Array.from(new Set(S.settings.trackPool.concat(['jeddah', 'miami', 'zandvoort', 'madrid', 'baku', 'lasvegas', 'lusail'])));
   S.settings.poolV = 2;
