@@ -1335,12 +1335,29 @@ body.focus #rcMsg.on{top:calc(var(--rcT,48px) + var(--sat) + var(--topx))}
 .sc-res{margin:8px 0}
 .sc-res b.dn{color:#ff8a8a}
 @media (max-width:520px){.sc-stages{grid-template-columns:1fr 1fr}.sc-st small{font-size:10px}.sc-st{padding:6px}}
+
+/* v1.23: oficina en cuatro apartados, ayudas plegadas, «Pendiente», negociación */
+.of-groups{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 6px}
+.of-g{min-height:44px;border-radius:10px;border:1px solid var(--line);background:#151920;color:inherit;font:600 13px/1.2 inherit;padding:6px 4px}
+.of-g.on{background:#ff2e88;border-color:#ff2e88;color:#fff}
+details.hlp{margin:6px 0}
+details.hlp summary{cursor:pointer;font-size:12px;opacity:.75;list-style:none;padding:4px 0;min-height:28px}
+details.hlp summary::-webkit-details-marker{display:none}
+details.hlp[open] summary{opacity:1}
+.pend{display:flex;flex-direction:column;gap:6px;margin:10px 0;padding:10px;border-radius:12px;background:#151920;border:1px solid var(--line)}
+.pend>b{font-size:13px;opacity:.8}
+.pend-it{display:flex;align-items:center;gap:8px;text-align:left;min-height:40px;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:#1b2029;color:inherit;font:inherit;font-size:14px}
+.pend-it span{font-size:18px}
+.ng .ng-ask{font-size:14px;margin-top:8px}
+.ng .pw-chips{margin:6px 0}
+.ng-msg{margin:10px 0;padding:10px;border-radius:10px;background:#1b2029;font-size:14px}
+.ng-msg.mid{border-left:3px solid #ffcf70}.ng-msg.bad{border-left:3px solid #ff8a8a}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.21.1 · FASE 21</small></div>
+    <div class="brand" id="brand" title="Novedades">CARRERAS<b>LAB</b><small>v1.23 · FASE 23</small></div>
     <button class="btn" id="btnMenu" title="Menú: todas las opciones">☰<span class="long"> Menú</span></button>
     <div id="raceinfo">
       <div class="lap"><span id="lapLbl">VUELTA</span> <b id="lapNow">–</b><span>/<b id="lapTot">–</b></span></div>
@@ -2740,7 +2757,9 @@ class Race {
       const toGate = mod(gate - mod(lead.sTot, L), L);
       // v1.19: si el líder está a más de media vuelta, el safety car sale ya y espera rodando despacio (antes esperaba
       // en el carril hasta que pasaba el líder: más de una vuelta entera neutralizada antes de empezar)
-      if ((toGate > 140 && toGate < 260) || (toGate > 0.5 * L && this.t - sc.t0 > 4)) {
+      // v1.22: y no se incorpora con coches pasando justo por la salida del carril (se metía delante y lo atravesaban)
+      const busy = this.t - sc.t0 < 30 && run.some((o) => o !== lead && !o.pit && (() => { const ds = mod(gate + 30 - mod(o.sTot, L), L); return ds < 140 || ds > L - 30; })());
+      if (!busy && ((toGate > 140 && toGate < 260) || (toGate > 0.5 * L && this.t - sc.t0 > 4))) {
         sc.phase = 'out'; sc.catchUp = toGate > 260;
         sc.sTot = lead.sTot + toGate; sc.v = 12; sc.d = PIT.d;
         this.ev({ type: 'sc_pista' });
@@ -4031,6 +4050,20 @@ class Race {
           if (tg !== null) { c.dbDodge = { id: db.id, s: db.s, d: tg }; break; }
         }
       } else if (c.pit || c.avoid) c.dbDodge = null;
+      // v1.22: el safety car ya no se atraviesa: al que le alcanza y no es el líder (los que le hace pasar para que se
+      // pongan al final de la fila) lo rodea por un lado, y mientras aún lo tiene justo delante no le pasa por encima
+      c.scDodge = null;
+      if (this.sc && this.sc.sTot !== null && this.sc.phase !== 'wait' && !c.pit && !c.finished && !c.dnf) {
+        const sc = this.sc, dsc = mod(mod(sc.sTot, L) - mod(c.sTot, L) + L / 2, L) - L / 2;
+        if (dsc > -3 && dsc < 70 && !(runOrder && runOrder[0] === c && dsc > P.carLen + 4)) {
+          const lat = Math.abs(c.d - sc.d);
+          if (lat < P.carWid + 1.2) {
+            const room = (sd) => (sd > 0 ? hw - 1 - sc.d : sc.d + hw - 1), side = room(1) >= room(-1) ? 1 : -1;
+            c.scDodge = { d: clamp(sc.d + side * (P.carWid + 1.5), -(hw - 0.8), hw - 0.8) };
+            if (dsc < P.carLen + 10 && lat < P.carWid + 0.3) vAllow = Math.min(vAllow, Math.max(0, sc.v - 1 + Math.max(0, dsc - P.carLen - 4) * 0.8));
+          }
+        }
+      }
 
       // ---- control longitudinal ----
       const offPre = Math.abs(c.d) - hw;
@@ -4136,6 +4169,7 @@ class Race {
       let lo = -(hw + 2), hi = hw + 2;
       if (pitD !== null) { dDes = pitD; lo = -(hw + 16); hi = hw + 16; }
       else if (c.avoid) { dDes = c.avoid.d; lo = -(hw + 2); hi = hw + 2; }
+      else if (c.scDodge) { dDes = c.scDodge.d; }
       else if (c.dbDodge) { dDes = c.dbDodge.d; }
       else if (c.pud) { dDes = c.pud.d; }
       else { const wl = c.squeezedBy && t - c.squeezedBy.t < 4 ? Math.min(4, Math.max(1, T.runoff - 1)) : c.duel && c.duel.wide ? c.duel.wide : c.mode === 'attack' && c.attWide ? c.attWide : 0; const lim = wl ? hw + wl : hw - 0.6; dDes = clamp(dDes, -lim, lim); }
@@ -10929,7 +10963,7 @@ function standings() {
   const sorter = (a, b) => b.pts - a.pts || b.wins - a.wins || a.best - b.best;
   return { drivers: Array.from(d.values()).sort(sorter), teams: Array.from(t.values()).sort((a, b) => b.pts - a.pts || b.wins - a.wins) };
 }
-const drvById = (id) => DATA.DRIVERS.find((x) => x.id === id) || (S.champ.season && S.champ.season.pool ? S.champ.season.pool.find((x) => x.id === id) : undefined) || (S.eras ? S.eras.drivers.find((x) => x.id === id) : undefined);
+const drvById = (id) => DATA.DRIVERS.find((x) => x.id === id) || (S.champ.season && S.champ.season.pool ? S.champ.season.pool.find((x) => x.id === id) : undefined) || (S.champ.season && S.champ.season.academy ? S.champ.season.academy.find((x) => x.id === id) : undefined) || (S.eras ? S.eras.drivers.find((x) => x.id === id) : undefined);
 const teamById = (id) => DATA.TEAMS.find((x) => x.id === id) || (S.eras ? S.eras.teams.find((x) => x.id === id) : undefined);
 
 async function saveAll() {
@@ -11147,6 +11181,7 @@ function resetView() {
 }
 // sesión de clasificación en pista
 function startQuali(phase) {
+  applySubs();
   S.exhibition = null;
   S.raceMode = isFree() || !seasonOn() ? 'libre' : 'temporada';
   if (S.pendingTrack && S.pendingTrack !== S.trackId) loadTrack(S.pendingTrack);
@@ -11361,6 +11396,7 @@ function startRace(ex, pre) {
   if (!pre) S.seed = ex ? newSeed() : raceSeed(); // tras la clasificación en pista, la misma semilla (y el mismo tiempo que se previó)
   if (!(pre && S.wxNow)) S.wxNow = eras ? erasWx(ex, S.seed) : raceWx(S.seed); // tras la clasificación en pista, el mismo tiempo que en ella
   const wxR = S.wxNow, useWx = !ex || eras;
+  if (!ex) applySubs(); // v1.23: el reserva sustituye al que no puede correr
   const n = S.entries.length;
   S.quali = null;
   let grid;
@@ -11472,6 +11508,7 @@ function finishRace() {
   if (S.raceMode === 'libre' || !seasonOn()) { rec.n = 0; rec.suelta = true; famaInit(); famaRace(rec, (S.champ.season && S.champ.season.year) || new Date().getFullYear(), false); saveAll(); showResults(rec); return; }
   S.champ.races.push(rec);
   afterSeasonRace(rec);
+  if (S.subsOn) { S.subsOn = false; afterTeamsChange(); } // v1.23: vuelven los titulares
   legAfterRace(rec);
   saveAll();
   cloudAuto();
@@ -11820,6 +11857,7 @@ function showExhibitionResults(r, res) {
 // ---------------- Academia (fase 2) ----------------
 function acOpen() { return !$('#academy').classList.contains('hidden'); }
 function openAcademy() {
+  hideHome(); // (v1.23: ahora también se abre desde el menú, con el inicio a la vista)
   $('#academy').classList.remove('hidden');
   const tr = S.trainer;
   if (tr.ready && !tr.profile) tr.analyze(null, 6);
@@ -12617,6 +12655,21 @@ function renderHud() {
 
 // ---------------- Novedades ----------------
 const CHANGELOG = [
+  { v: '1.23', items: [
+    '🗂 Oficina en cuatro apartados (🔧 Coche · 🏎 Pilotos · 👥 Equipo · 💶 Dinero) con sus pestañas dentro; las explicaciones largas, plegadas en «ⓘ Cómo funciona»',
+    '📌 «Pendiente» en el inicio: ofertas, subidas que te piden, contratos que acaban, bajas, jóvenes listos para la F1, obras terminadas, patrocinio sin elegir… Tocas y vas directo',
+    '✍ Negociar con los pilotos: años (1 a 3), sueldo (por debajo o por encima de lo que piden), bonus por puntos y cláusula de salida. Responden según lo que valen, su ánimo, tu coche y cómo están rindiendo: aceptan, piden un poco más o se cierran hasta la próxima carrera',
+    '📨 Ofertas por tus pilotos: además de aceptar o rechazar, puedes pedir más (suben o se retiran). Si un equipo paga la cláusula de uno que está a disgusto, se va. Los que rinden y cobran poco piden subida. El resto de equipos renueva y se mueve en las noticias',
+    '🏭 Instalaciones (simulador, túnel de viento, fábrica): obras de 4 carreras que se quedan para siempre; abaratan el desarrollo, afinan el reglaje, hacen progresar a los pilotos y que las piezas fallen menos y lleguen antes. La IA también invierte',
+    '🎓 La cantera corre en F3 y F2 por detrás: resultados cada fin de semana, suben de categoría, suman superlicencia (40 para subir a la F1) y progresan más si ganan. El ojeador te deja ver un margen del potencial de los jóvenes que se va cerrando',
+    '🦺 Piloto reserva: si uno se pone enfermo (raro) o le sancionan una carrera por acumular 12 puntos en el carné, corre tu reserva (o el mejor libre)',
+    '🏫 Escuela: un piloto ya sabe conducir; el entrenamiento propio parte de lo del piloto de pruebas (lo que le diferencia son sus stats)',
+  ] },
+  { v: '1.22', items: [
+    '🚨 El safety car ya no se atraviesa: sale del carril cuando hay hueco, y los que lo alcanzan sin ser el líder (a los que deja pasar para ponerse al final de la fila) lo rodean por un lado (de 48 coches que lo atravesaban en 12 safety cars de prueba a 5)',
+    '🧪 La academia de redes pasa a «Avanzado» en el menú (en el inicio solo sale si la usas); lo de pilotar ya lo hace la escuela',
+    '🔔 La escuela avisa al terminar: notificación del sistema (si le das permiso al empezar), vibración y la pestaña del navegador marcada',
+  ] },
   { v: '1.21.1', items: ['🧵 La escuela usa hasta 12 núcleos en un ordenador (antes 6): entrena bastante más rápido. Lo aprendido va en la copia y en la nube, así que se puede entrenar en el ordenador y jugar en el móvil'] },
   { v: '1.21', items: [
     '🏫 La escuela, del tirón en siete etapas: ⚡ Rápido · 🧽 Limpio · 🔋 Batería · 🛞 Gomas (en qué curvas cuidarlas y cuánto apretar con las gomas frías, contando lo gastado como media parada) · 🌧 Lluvia (su propia línea y cuánto apurar en mojado) · 🚦 Salidas (hacia dónde abrirse y cómo llegar a la 1.ª curva) · ⚔ Pelea',
@@ -13218,20 +13271,22 @@ function showHome() {
     ['free', '🏁', 'Carrera suelta', 'Cualquier circuito'],
     ['eras', '⏳', 'Duelo de eras', 'Leyendas contra los de hoy'],
     ['champ', '📊', 'Campeonato', 'Clasificación y calendario'],
-    ['acad', '🧠', 'Academia', net ? esc(net.name) + (S.trainer.ready ? ' · G' + S.trainer.gen : '') : 'Entrena las redes', net && net.exams && net.exams.length && net.exams[net.exams.length - 1].nota !== undefined ? 'nota ' + net.exams[net.exams.length - 1].nota : ''],
+    S.settings.brain === 'red' ? ['acad', '🧪', 'Redes (avanzado)', net ? esc(net.name) + (S.trainer.ready ? ' · G' + S.trainer.gen : '') : 'Entrena las redes', net && net.exams && net.exams.length && net.exams[net.exams.length - 1].nota !== undefined ? 'nota ' + net.exams[net.exams.length - 1].nota : ''] : null,
     ['school', '🏫', 'Escuela de pilotaje', schoolTileTxt()],
     ['teams', '🏎', 'Escuderías', `${DATA.TEAMS.length} equipos · ${DATA.DRIVERS.length} pilotos`],
     ['fama', '🏛', 'Salón de la fama', 'Récords y campeones'],
     ['edit', '✏', 'Editor', 'Dibuja tus circuitos'],
     ['leg', '⭐', 'Leyendas', `${nLegOn()} de ${DATA.LEGENDS.length} en tu carrera`],
-  ].concat(on ? [['season', '🆕', 'Nueva temporada', 'Empezar otra desde cero']] : []);
+  ].filter(Boolean).concat(on ? [['season', '🆕', 'Nueva temporada', 'Empezar otra desde cero']] : []); // v1.22: la academia de redes solo aparece aquí si la usas
   h.innerHTML = `<div class="pw-home">
     <div class="pw-brand"><h1>Carreras<span>Lab</span></h1><small>${$('#brand small') ? esc($('#brand small').textContent.replace(/ · FASE.*/, '')) : ''}</small></div>
     ${hero}
+    ${pendingHTML()}
     <div class="pw-tiles">${tiles.map(([k, ic, t, d, badge]) => `<button class="pw-t" data-home="${k}"><span class="ic">${ic}</span><b>${t}</b><small>${d}</small>${badge ? `<span class="badge">${badge}</span>` : ''}</button>`).join('')}</div>
     <div class="pw-foot">Trazados: bacinger/f1-circuits (MIT) y TUM racetrack-database (LGPL) · letras Titillium Web y Chakra Petch (OFL)</div></div>`;
   h.classList.remove('hidden');
   if (S.scene) fitCam(true);
+  $$('#home [data-pend]').forEach((b) => (b.onclick = () => pendOpen(b.dataset.pend)));
   $$('#home [data-home]').forEach((b) => (b.onclick = () => {
     const k = b.dataset.home;
     hideHome();
@@ -13626,7 +13681,7 @@ function showErasResults(r, res) {
 }
 
 window.__legDbg = { legAfterRace, legSeasonEnd, carRank, legProgress }; // para las pruebas
-window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice(), showSchool: () => showSchool(), sch: () => SCH, schStart: (tid, stage) => schoolStart(null, tid, stage) }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
+window.__setupTrue = (T) => setupTrue(T); window.__examDone = () => examDone(); window.__saveNow = () => { saveAll(); saveBrains(); }; window.__t = { showSeasonSetup: () => showSeasonSetup(), showPreRace: () => showPreRace(), devLeft: (id) => devLeft(id), cap: () => DEV_CAP, effSpeed: (r) => effSpeed(r), showOffice: () => showOffice(), showSchool: () => showSchool(), sch: () => SCH, schStart: (tid, stage) => schoolStart(null, tid, stage), openAcademy: () => openAcademy() }; window.__celebrate = (i) => celebrate(i); Object.defineProperty(window, '__celebTrad', { get: () => CELEB_TRAD }); // para las pruebas
 
 // ---- salón de la fama: las leyendas con sus récords reales, más lo que hagan en el juego ----
 function famaLegends(F) {
@@ -13795,12 +13850,12 @@ function showMenu() {
     ['eras', '⏳', 'Duelo de eras', 'Leyendas de la F1 contra los pilotos de hoy, con el mismo coche'],
     ['leg', '⭐', 'Leyendas', 'Quién hay y cómo se desbloquea cada una para la temporada'],
     ss && ss.manager ? ['office', '🏢', 'Oficina del mánager', 'Mejorar el coche, fichar pilotos y estrategas'] : null,
-    ['school', '🏫', 'Escuela de pilotaje', 'Que aprendan cada circuito: rápidos, limpios y con la batería'],
-    ['acad', '🧠', 'Academia', 'Entrenar y comparar las redes, estrategas'],
+    ['school', '🏫', 'Escuela de pilotaje', 'Que aprendan cada circuito, del tirón: rápidos, limpios, gomas, lluvia, salidas y peleas'],
     ['teams', '🎨', 'Escuderías y pilotos', 'Nombres, colores, stats, rasgos y estrategas'],
     ['edit', '✏', 'Editor de circuitos', 'Dibuja tus propios circuitos'],
     ['full', '⛶', 'Pantalla completa', 'Solo la pista, sin paneles'],
     ['news', '📰', 'Novedades', 'Qué ha cambiado en cada versión'],
+    ['acad', '🧪', 'Avanzado: redes neuronales', 'La academia antigua (opcional): redes para decidir las peleas y estrategas. Lo de pilotar ya lo hace la escuela'],
   ].filter(Boolean);
   modal(`<h2><small>CARRERASLAB</small>Menú</h2>
     <div class="menu-grid">${items.map(([k, ic, t, d]) => `<button class="menu-it" data-menu="${k}"><span class="mi-ic">${ic}</span><span><b>${t}</b><small>${d}</small></span></button>`).join('')}</div>
@@ -14226,8 +14281,9 @@ function schRec(d, tid, T) {
   let k = d.kn[tid];
   if (k && k.th && k.th.length !== n) { const m = SIM.knMigrate(T, k.th); if (m) k.th = m; } // lo de versiones anteriores, al formato nuevo
   if (!k || !k.th || k.th.length !== n) {
-    const vet = knVet(d, tid), G = schoolData().tracks[tid], gOk = G && G.th && G.th.length === n && G.lapB && G.lapM && G.lapB <= G.lapM + 0.02;
-    k = d.kn[tid] = { th: gOk ? G.th.slice() : vet ? new Array(n).fill(0) : knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: vet || gOk, hist: [], fromGen: !!gOk };
+    // v1.23: un piloto ya sabe conducir: parte de lo del piloto de pruebas o, si aún no hay, de la trazada de manual (el novato es peor por sus stats, no por no saber)
+    const G = schoolData().tracks[tid], gOk = G && G.th && G.th.length === n && G.lapB && G.lapM && G.lapB <= G.lapM + 0.02;
+    k = d.kn[tid] = { th: gOk ? G.th.slice() : new Array(n).fill(0), st: 0, g: 0, vet: true, hist: [], fromGen: !!gOk };
   }
   return k;
 }
@@ -14253,6 +14309,19 @@ function schoolStop(silent) {
   if (R.k) R.k.school = false;
   knSave(R);
   if (!silent && schoolOpen()) renderSchool();
+}
+// v1.22: aviso al terminar (notificación del sistema si se ha dado permiso, vibración y el título de la pestaña)
+function schAskNotify() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* sin avisos */ } }
+async function schNotify(body) {
+  flash('🏫 ' + body.toUpperCase(), 2400);
+  try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) { /* nada */ }
+  if (document.hidden) { const t0 = document.title; document.title = '✓ ' + body; const back = () => { document.title = t0; document.removeEventListener('visibilitychange', back); }; document.addEventListener('visibilitychange', back); }
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const opt = { body, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'escuela' };
+    const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration());
+    if (reg && reg.showNotification) await reg.showNotification('CarrerasLab · Escuela', opt); else new Notification('CarrerasLab · Escuela', opt);
+  } catch (e) { /* sin avisos */ }
 }
 function schoolPause(why) {
   const R = SCH.run; if (!R) return;
@@ -14326,8 +14395,11 @@ async function schoolLoop(R) {
         k.prueba = { posW: +pr.posW.toFixed(2), posZ: +pr.posZ.toFixed(2), ctW: +pr.ctW.toFixed(2), ctZ: +pr.ctZ.toFixed(2), offW: +pr.offW.toFixed(2), offZ: +pr.offZ.toFixed(2), n: pr.n };
         k.raceOff = pr.posW > pr.posZ + 0.4; k.feat = SCHOOL.cornerFeat(R.T); knSave(R);
         R.on = false; SCH.run = null; k.school = false;
+        if (R.queue) R.queue.done = (R.queue.done || 0) + 1;
         if (R.queue && R.queue.length) { const nx = R.queue.shift(); flash(`🏫 ${R.T.name.toUpperCase()} APRENDIDO · AHORA: ${(trackDef(nx) || {}).name || nx}`.toUpperCase(), 1800); if (R.gen) S.schTrk = nx; schoolStart(R.gen ? null : R.d, nx, 0, R.queue); return; }
-        flash('🏫 ESCUELA TERMINADA EN ESTE CIRCUITO', 1800); if (schoolOpen()) renderSchool(); return;
+        const gainTxt = k.lapB && k.lapM ? ` (${dS(k.lapB - k.lapM)} por vuelta frente al manual)` : '';
+        schNotify(R.queue && R.queue.done > 1 ? `Escuela terminada: ${R.queue.done} circuitos aprendidos` : `${R.T.name} aprendido${gainTxt}`);
+        if (schoolOpen()) renderSchool(); return;
       }
     }
     if (schoolOpen()) renderSchool();
@@ -14439,7 +14511,7 @@ function renderSchool(light) {
     .map(([k2, l, list]) => [k2, l, list.filter(undone)]).filter(([k2, , list]) => list.length > (k2 === 'cal' ? 1 : 0));
   const trf = gen && !(k && k.st) ? knTransfer(tid, T) : null;
   const intro = gen ? `El piloto de pruebas aprende cada circuito desde cero, por etapas y del tirón, y <b>lo usan ${D.who === 'equipo' ? (M ? 'solo los pilotos de tu equipo' : 'solo tú') : 'todos los pilotos'}</b>, también los autogenerados y los de la cantera; cada uno lo aprovecha según sus stats y con su propio estilo. Si un piloto tiene entrenamiento propio en un circuito, usa el suyo.${trf ? ` <b>${esc(T.name)} aún no está aprendido:</b> mientras, se usa lo aprendido en las curvas más parecidas de otros circuitos (da algo menos que entrenarlo).` : ''}`
-    : k ? '' : G && knOk(G, n) ? `${esc(d.name)} parte de lo que sabe el piloto de pruebas de ${esc(T.name)} y lo afina a su manera.` : vet ? `${esc(d.name)} ya conoce ${esc(T.name)}: empieza con la trazada de manual y lo que puede ganar son décimas.` : `${esc(d.name)} no ha corrido nunca en ${esc(T.name)}: empieza de cero, con miedo y por el centro de la pista.`;
+    : k ? '' : G && knOk(G, n) ? `${esc(d.name)} parte de lo que sabe el piloto de pruebas de ${esc(T.name)} y lo afina a su manera.` : `${esc(d.name)} empieza con la trazada de manual y lo afina a su manera (ya sabe conducir: lo que le diferencia son sus stats).`;
   box.innerHTML = `<div class="pw-top"><button class="back" id="scBack" title="Volver">‹</button><h1>Escuela de pilotaje</h1></div>
     <div class="pw-body sc">
       <div class="pw-chips sc-mode"><button class="pw-chip ${gen ? 'on' : ''}" data-scmode="gen">👥 Para todos</button><button class="pw-chip ${gen ? '' : 'on'}" data-scmode="drv">👤 Un piloto</button></div>
@@ -14450,7 +14522,7 @@ function renderSchool(light) {
       <div class="sc-stages">${stages}</div>
       ${status}
       ${nums}
-      <div class="sc-vis">${schChartSVG(k || {}, chartSt)}${schMapSVG(T, k ? k.th : gen || !vet ? SCHOOL.rookieTh(T) : null, apt)}</div>
+      <div class="sc-vis">${schChartSVG(k || {}, chartSt)}${schMapSVG(T, k ? k.th : gen ? SCHOOL.rookieTh(T) : null, apt)}</div>
       <div class="sc-leg muted"><span class="l1"></span>trazada de manual <span class="l2"></span>la ${gen ? 'aprendida' : 'suya'}</div>
       ${gen ? '' : `<div class="sc-apt"><b>Lo que aprovecha de lo aprendido</b> (sus stats): curvas rápidas ${pc(apt.fast)} · curvas lentas ${pc(apt.slow)} · frenada ${pc(apt.brake)} · trazada ${pc(apt.line)} · batería ${pc(0.5 + 0.5 * apt.energy)}</div>`}
       <div class="ac-row sc-act">
@@ -14468,15 +14540,15 @@ function renderSchool(light) {
   $$('#mbox [data-sctrk]').forEach((b) => (b.onclick = () => { S.schTrk = b.dataset.sctrk; renderSchool(); }));
   if ($('#scDrv')) $('#scDrv').onchange = (e) => { S.schDrv = e.target.value; renderSchool(); };
   $('#scTrk').onchange = (e) => { S.schTrk = e.target.value; renderSchool(); };
-  if ($('#scGo')) $('#scGo').onclick = () => { if (!busyRace()) schoolStart(gen ? null : d, tid); };
-  const runQ = (list) => { if (busyRace() || !list.length) return; const q = list.filter((t) => t !== tid); const first = list.includes(tid) ? tid : q.shift(); S.schTrk = first; schoolStart(null, first, undefined, q); };
+  if ($('#scGo')) $('#scGo').onclick = () => { if (!busyRace()) { schAskNotify(); schoolStart(gen ? null : d, tid); } };
+  const runQ = (list) => { if (busyRace() || !list.length) return; schAskNotify(); const q = list.filter((t) => t !== tid); const first = list.includes(tid) ? tid : q.shift(); S.schTrk = first; schoolStart(null, first, undefined, q); };
   $$('#mbox [data-scq]').forEach((b) => (b.onclick = () => { const c2 = cats.find((x) => x[0] === b.dataset.scq); if (c2) runQ(c2[2]); }));
   if ($('#scStop')) $('#scStop').onclick = () => schoolStop();
   if ($('#scReset')) $('#scReset').onclick = () => {
-    if (!confirm(gen ? `¿Olvidar lo que sabe el piloto de pruebas de ${T.name} y empezar de cero?` : `¿Olvidar lo que sabe ${d.name} de ${T.name} y empezar como un novato?`)) return;
+    if (!confirm(gen ? `¿Olvidar lo que sabe el piloto de pruebas de ${T.name} y empezar de cero?` : `¿Olvidar lo que ha afinado ${d.name} en ${T.name}?`)) return;
     if (mine) schoolStop(true);
     if (gen) { D.tracks[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: false, hist: [] }; knSave({ gen: true }); }
-    else { const vetNow = knVet(d, tid); d.kn[tid] = { th: knRound(SCHOOL.rookieTh(T)), st: 0, g: 0, vet: vetNow, hold: vetNow, hist: [] }; knSave({ d }); }
+    else { delete d.kn[tid]; knSave({ d }); } // (vuelve a partir de lo del piloto de pruebas)
     renderSchool();
   };
   $('#scCores').onclick = () => { const o = [0, 1, 2, 4, 6, 8, 12], i = o.indexOf(S.settings.schoolCores || 0); S.settings.schoolCores = o[(i + 1) % o.length]; saveAll(); const was = SCH.run; if (was) schoolStop(true); schoolKill(); if (was) schoolStart(was.gen ? null : was.d, was.tid, was.stage, was.queue); renderSchool(); };
@@ -15366,8 +15438,10 @@ const mgrTeam = () => (seasonOn() && S.raceMode !== 'libre' ? S.champ.season.man
 const money = (x) => Math.abs(x) > 0 && Math.abs(x) < 0.1 ? Math.round(x * 1000).toLocaleString('es-ES') + ' mil €' : (Math.round(x * 10) / 10).toLocaleString('es-ES') + ' M€';
 const upCost = (v) => Math.round((3 + Math.max(0, v - 65) * 0.4) * 10) / 10;
 const upCostTm = (tm, k) => Math.round(upCost(tm.car[k]) * (k === 'desarrollo' ? 1 : 1.35 - 0.5 * devOf(tm)) * 10) / 10;
-function salaryOf(d) { return Math.round((0.3 + Math.max(0, DATA.overall(d.stats) - 60) * 0.06 + (DATA.rarityOf(d).id === 'leyenda' ? 0.4 : 0)) * 100) / 100; }
-function feeOf(d) { return Math.round(salaryOf(d) * 8 * 10) / 10; }
+// lo que vale un piloto en el mercado (sueldo de referencia); v1.23: con contrato firmado cobra lo pactado (d.sal)
+function baseSalary(d) { return Math.round((0.3 + Math.max(0, DATA.overall(d.stats) - 60) * 0.06 + (DATA.rarityOf(d).id === 'leyenda' ? 0.4 : 0)) * 100) / 100; }
+function salaryOf(d) { return d.sal && d.team ? d.sal : baseSalary(d); }
+function feeOf(d) { return Math.round(baseSalary(d) * 8 * 10) / 10; }
 function jefeSalary(j) { return j ? Math.round((0.15 + Math.max(0, DATA.stratOverall(j) - 60) * 0.025) * 100) / 100 : 0; }
 function jefeFee(j) { return Math.round(Math.max(2, (DATA.stratOverall(j) - 50) * 0.45) * 10) / 10; }
 const rpick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -15478,14 +15552,44 @@ function updateMoral(rec, news) {
 }
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 // piezas en desarrollo: tardan unas carreras en llegar y no siempre rinden lo previsto
-function partEta(tm) { return 1 + (devOf(tm) < 0.75 ? 1 : 0) + (Math.random() < 0.35 ? 1 : 0); }
+function partEta(tm) { return Math.max(1, 1 + (devOf(tm) < 0.75 ? 1 : 0) + (Math.random() < 0.35 ? 1 : 0) - (facLvl(tm.id, 'fab') >= 3 ? 1 : 0)); } // v1.23: con buena fábrica, antes
+// ---------------- v1.23 · Instalaciones: inversiones a largo plazo (se quedan de una temporada a otra) ----------------
+const FAC = {
+  sim: { ic: '🎮', name: 'Simulador', what: 'Reglaje más fino y los pilotos (y la cantera) progresan más' },
+  tunel: { ic: '🌬', name: 'Túnel de viento', what: 'Las mejoras del coche salen más baratas' },
+  fab: { ic: '🏭', name: 'Fábrica', what: 'Las piezas fallan menos y, desde el nivel 3, llegan una carrera antes' },
+};
+const FAC_COST = [0, 8, 14, 20, 28, 36], FAC_BUILD = 4, FAC_MAX = 5;
+function facAll() {
+  const ch = S.champ; ch.fac = ch.fac || {};
+  const ts = raceTeams().slice().sort((a, b) => teamStrength(b) - teamStrength(a));
+  ts.forEach((t, i) => { if (!ch.fac[t.id]) { const l = t.own ? 1 : i < ts.length / 3 ? 3 : i < (2 * ts.length) / 3 ? 2 : 1; ch.fac[t.id] = { sim: l, tunel: l, fab: l, build: null }; } });
+  return ch.fac;
+}
+const facLvl = (id, k) => { try { const f = facAll()[id]; return f ? f[k] || 0 : 0; } catch (e) { return 0; } };
+const facUpkeep = (id) => { const f = (S.champ.fac || {})[id]; return f ? 0.08 * ((f.sim || 0) + (f.tunel || 0) + (f.fab || 0)) : 0; };
+function facStep(news) { // cada carrera: avanzan las obras
+  const F = facAll(), M = S.champ.season && S.champ.season.manager;
+  for (const [id, f] of Object.entries(F)) if (f.build) { f.build.left--; if (f.build.left <= 0) { f[f.build.k] = Math.min(FAC_MAX, (f[f.build.k] || 0) + 1); if (id === M) { news.push(`🏗 Terminada la obra: ${FAC[f.build.k].name} al nivel ${f[f.build.k]}`); pendAdd({ type: 'fac' }); } f.build = null; } }
+}
+function facOffSeason(news) { // la IA también invierte
+  const F = facAll(), ss = S.champ.season;
+  for (const t of raceTeams()) { if (t.id === ss.manager) continue; const f = F[t.id]; if (!f || f.build) continue; const k = rpick(Object.keys(FAC)), l = f[k] || 0; if (l < FAC_MAX && (ss.budgets[t.id] ?? 0) > FAC_COST[l + 1] + 40 && Math.random() < 0.45) { ss.budgets[t.id] -= FAC_COST[l + 1]; f[k] = l + 1; if (l + 1 >= 4) news.push(`🏗 ${t.name} estrena ${FAC[k].name.toLowerCase()} de nivel ${l + 1}`); } }
+}
+function facHTML(tm, b) {
+  const f = facAll()[tm.id], rivals = raceTeams().filter((t) => t !== tm), best = (k) => Math.max(...rivals.map((t) => facLvl(t.id, k)));
+  return `<div class="note">Inversiones que tardan ${FAC_BUILD} carreras en estar listas pero se quedan para siempre. Mantenerlas cuesta ${money(0.08)} por nivel y carrera. Una obra cada vez.</div>
+    <div class="of-list">${Object.entries(FAC).map(([k, x]) => { const l = f[k] || 0, c = FAC_COST[l + 1]; return `<div class="of-card"><div class="of-ch"><span class="fl">${x.ic}</span><div><b>${x.name}</b><small>${x.what}</small></div><span class="of-ov">${l}</span></div>
+      <div class="of-bar"><i style="width:${l * 20}%"></i><u style="left:${best(k) * 20}%"></u></div><div class="muted" style="font-size:12px">Nivel ${l} de ${FAC_MAX} · el mejor rival: ${best(k)}</div>
+      <div class="of-act">${f.build && f.build.k === k ? `<span class="muted">🏗 En obras: lista en ${f.build.left} carrera${f.build.left === 1 ? '' : 's'}</span>` : l >= FAC_MAX ? '<span class="muted">Al máximo</span>' : `<button class="btn ghost" data-fac="${k}" ${f.build || c > b ? 'disabled' : ''}>Subir al nivel ${l + 1} · ${money(c)}</button>`}</div></div>`; }).join('')}</div>`;
+}
 function advanceParts(news) {
   const ss = S.champ.season; if (!ss.parts || !ss.parts.length) return;
   ss.parts = ss.parts.filter((pt) => {
     pt.left--;
     if (pt.left > 0) return true;
     const tm = teamById(pt.team); if (!tm) return false;
-    const dv = devOf(tm), q = Math.random() + 0.06 * staffK(tm, 'tecnico'); // v1.13: con buen director técnico fallan menos
+    const dv = devOf(tm), q = Math.random() + 0.06 * staffK(tm, 'tecnico') + 0.03 * facLvl(tm.id, 'fab'); // v1.13: con buen director técnico fallan menos (v1.23: y con buena fábrica)
     // pieza: casi siempre funciona; paquete: más ganancia y más riesgo (a veces no correlaciona con la pista)
     const amt = pt.kind === 'cliente' ? pt.amt : pt.kind === 'pieza' ? (q < 0.08 * (1.4 - dv) ? 0 : pt.amt) : q < 0.12 * (1.4 - dv) ? 0 : q < 0.35 ? pt.amt - 1 : q > 0.85 + 0.1 * (1 - dv) ? pt.amt + 1 : pt.amt;
     tm.car[pt.k] = Math.min(99, tm.car[pt.k] + amt);
@@ -15496,6 +15600,92 @@ function advanceParts(news) {
   });
 }
 function renewCost(d) { return Math.round(feeOf(d) * 0.45 * 10) / 10; }
+// ---------------- v1.23 · «Pendiente»: lo que te toca decidir, en el inicio ----------------
+function pendAdd(o) { const ss = S.champ.season; if (!ss || o.type !== 'fac') return; ss.pend = ss.pend || {}; ss.pend.fac = true; }
+function pendDrop(type) { const ss = S.champ.season; if (ss && ss.pend && type === 'fac') ss.pend.fac = false; }
+function pendingList() {
+  const ss = S.champ.season, M = ss && seasonOn() && ss.manager; if (!M) return [];
+  const out = [], mine = DATA.DRIVERS.filter((d) => d.team === M), races = S.champ.races.length;
+  if (!ss.sponsor) out.push(['patro', '💼', 'Elige patrocinador para la temporada']);
+  for (const o of ss.offers || []) { const d = DATA.DRIVERS.find((x) => x.id === o.driver), t = teamById(o.team); if (d && t && !o.counter) out.push(['mercado', '📨', `${t.name} ofrece ${money(o.amount)} por ${d.short}`]); }
+  for (const d of mine) if (d.askRaise) out.push(['raise:' + d.id, '💬', `${d.short} pide una subida`]);
+  for (const d of mine) if (d.outNext && d.outNext.race === races) out.push(['cantera', d.outNext.why === 'enfermo' ? '🤒' : '🟥', `${d.short} no corre la próxima carrera`]);
+  if (races >= Math.ceil(ss.n * 0.6)) for (const d of mine) if ((d.contract ?? 1) <= 1 && !d.me) out.push(['pilotos', '📄', `Se acaba el contrato de ${d.short}`]);
+  const worst = Math.min(...mine.map((d) => DATA.overall(d.stats)));
+  for (const d of acad()) if (slOf(d) >= SL_NEED && DATA.overall(d.stats) >= worst - 1) out.push(['cantera', '🎓', `${d.short} está listo para la F1`]);
+  if (ss.pend && ss.pend.fac) out.push(['fac', '🏗', 'Obra terminada en las instalaciones']);
+  if ((ss.budgets[M] ?? 0) < 0) out.push(['coche', '🔴', 'Presupuesto en negativo']);
+  return out;
+}
+function pendingHTML() { const L = pendingList(); return L.length ? `<div class="pend"><b>Pendiente</b>${L.slice(0, 6).map(([k, ic, t]) => `<button class="pend-it" data-pend="${k}"><span>${ic}</span>${esc(t)}</button>`).join('')}</div>` : ''; }
+function pendOpen(k) {
+  if (k.startsWith('raise:')) { const d = DATA.DRIVERS.find((x) => x.id === k.slice(6)); if (d) { S.neg = null; showNegotiate(d, 'raise'); } return; }
+  if (k === 'fac') pendDrop('fac');
+  S.ofTab = k; showOffice();
+}
+// ---------------- v1.23 · Negociar con los pilotos: años, sueldo, bonus por puntos y cláusula ----------------
+const BONUS_PT = 0.04; // M€ por punto con bonus
+function expPts(d) { const st = standings(), x = st.drivers.find((y) => y.id === d.id), n = S.champ.races.length; return x && n ? x.pts / n : Math.max(0, (DATA.overall(d.stats) - 80) * 0.7); }
+// lo que pide: según lo que vale, su ánimo, lo bueno que es tu coche y cómo está rindiendo; y cuántos años prefiere
+function drvAsk(d, tm) {
+  const ov = DATA.overall(d.stats), R = teamRank(tm.id), weak = (R.pos - 1) / Math.max(1, R.n - 1), m = d.moral ?? 70;
+  let k = 1 + (m < 50 ? 0.15 : m >= 85 ? -0.08 : 0) + (ov >= 88 ? 0.1 : 0) + 0.15 * weak * Math.max(0, (ov - 78) / 15);
+  const rt = ratingAvg(d.id); if (rt !== null) k += clampN((rt - 6.5) * 0.05, -0.08, 0.12);
+  const yrs = d.age <= 24 && (d.pot || 0) > ov + 4 ? 2 : d.age >= 33 ? 3 : ov >= 88 ? 2 : 3;
+  return { sal: Math.round(baseSalary(d) * k * 100) / 100, yrs };
+}
+// 'si' · 'casi' (le falta poco) · 'no'
+function drvAnswer(d, tm, o) {
+  const a = drvAsk(d, tm), val = o.sal + (o.bonus ? BONUS_PT * expPts(d) : 0);
+  const sc = val / Math.max(0.05, o.ask || a.sal) - Math.abs(o.yrs - a.yrs) * 0.04 + ((d.moral ?? 70) - 70) / 400 + (Math.random() - 0.5) * 0.04;
+  return sc >= 0.975 ? 'si' : sc >= 0.82 ? 'casi' : 'no';
+}
+function showNegotiate(d, mode, ctx) {
+  const ss = S.champ.season, tm = teamById(ss.manager); if (!tm || !d) return;
+  const a = drvAsk(d, tm);
+  if (!S.neg || S.neg.id !== d.id || S.neg.mode !== mode) S.neg = { id: d.id, mode, yrs: mode === 'raise' ? Math.max(1, d.contract ?? 1) : a.yrs, k: 1, bonus: false, msg: null, ask: mode === 'raise' && d.askRaise ? d.askRaise : a.sal, closed: false, ctx };
+  const N = S.neg, b = ss.budgets[tm.id] ?? 0, races = S.champ.races.length;
+  const sal = Math.round(N.ask * N.k * (N.bonus ? 0.85 : 1) * 100) / 100;
+  const fee = mode === 'renew' ? renewCost(d) : mode === 'sign' ? demand(d, tm).fee : 0;
+  const closed = N.closed || (d.noTalk !== undefined && d.noTalk >= races && N.msg === null);
+  const title = mode === 'renew' ? `Renovar a ${esc(d.name)}` : mode === 'sign' ? `Fichar a ${esc(d.name)}` : `${esc(d.name)} pide una subida`;
+  const ks = [[0.85, '−15 %'], [0.95, '−5 %'], [1, 'Lo que pide'], [1.1, '+10 %']];
+  modal(`<div class="pw-top"><button class="back" id="ngBack" title="Volver">‹</button><h1>${title}</h1><span class="of-bud">${money(b)}</span></div>
+    <div class="pw-body ng">
+      <div class="of-card"><div class="of-ch"><span class="fl">${DATA.flagOf(d.nat)}</span><div><b>${esc(d.name)}</b><small>${d.age} años · media ${DATA.overall(d.stats)} · ${moralTxt(d.moral)}${d.team === tm.id ? ` · cobra ${money(salaryOf(d))}/carrera · contrato: ${d.contract ?? 1} temporada${(d.contract ?? 1) === 1 ? '' : 's'}` : ''}</small></div></div>
+        <div class="ng-ask">Pide <b>${money(N.ask)}</b> por carrera y prefiere <b>${a.yrs} temporada${a.yrs > 1 ? 's' : ''}</b>${d.age <= 24 ? ' (es joven: no quiere atarse mucho)' : d.age >= 33 ? ' (quiere seguridad)' : ''}.</div></div>
+      ${mode !== 'raise' ? `<h3>Años</h3><div class="pw-chips">${[1, 2, 3].map((y) => `<button class="pw-chip ${N.yrs === y ? 'on' : ''}" data-ngy="${y}">${y} temporada${y > 1 ? 's' : ''}${y === a.yrs ? ' ★' : ''}</button>`).join('')}</div>` : ''}
+      <h3>Sueldo</h3><div class="pw-chips">${ks.map(([k, l]) => `<button class="pw-chip ${Math.abs(N.k - k) < 1e-6 ? 'on' : ''}" data-ngk="${k}">${l}</button>`).join('')}</div>
+      <div class="pw-chips"><button class="pw-chip ${N.bonus ? 'on' : ''}" data-ngb="1">🏁 Con bonus por puntos: −15 % de fijo y ${money(BONUS_PT)} por punto</button></div>
+      <div class="note">Le ofreces <b>${money(sal)}</b> por carrera${N.bonus ? ` + ${money(BONUS_PT)} por punto (con su ritmo, unos ${money(BONUS_PT * expPts(d))} más)` : ''}${mode !== 'raise' ? ` durante ${N.yrs} temporada${N.yrs > 1 ? 's' : ''}` : ''}${fee ? ` · ${mode === 'sign' ? 'traspaso' : 'prima de renovación'}: ${money(fee)}` : ''}. Su cláusula de salida será de ${money(Math.round(feeOf(d) * (1.3 + 0.3 * N.yrs) * 10) / 10)}: si un equipo la paga y él quiere irse, se va.</div>
+      ${N.msg ? `<div class="ng-msg ${N.msgK || ''}">${N.msg}</div>` : ''}
+      <div class="of-act">${closed ? '<span class="muted">No quiere seguir hablando hasta la próxima carrera.</span>' : `<button class="btn big" id="ngGo" ${fee > b ? 'disabled' : ''}>Ofrecer</button>`}${mode === 'raise' ? '<button class="btn ghost" id="ngNo">No subirle</button>' : ''}</div>
+    </div>`);
+  $('#mbox').classList.add('pw-screen');
+  const back = () => { S.neg = null; showOffice(); };
+  $('#ngBack').onclick = back;
+  $$('#mbox [data-ngy]').forEach((x) => (x.onclick = () => { N.yrs = +x.dataset.ngy; showNegotiate(d, mode, ctx); }));
+  $$('#mbox [data-ngk]').forEach((x) => (x.onclick = () => { N.k = +x.dataset.ngk; showNegotiate(d, mode, ctx); }));
+  $$('#mbox [data-ngb]').forEach((x) => (x.onclick = () => { N.bonus = !N.bonus; showNegotiate(d, mode, ctx); }));
+  if ($('#ngNo')) $('#ngNo').onclick = async () => { d.moral = clampN((d.moral ?? 70) - 10, 15, 100); d.askRaise = null; pendDrop('raise', d.id); flash(`${d.short}: SIN SUBIDA. NO LE HA SENTADO BIEN`, 1600); await saveRoster(); back(); };
+  if ($('#ngGo')) $('#ngGo').onclick = async () => {
+    const ans = drvAnswer(d, tm, { sal: N.ask * N.k * (N.bonus ? 0.85 : 1), bonus: N.bonus, yrs: N.yrs, ask: N.ask });
+    if (ans === 'si') {
+      if (fee > (ss.budgets[tm.id] ?? 0)) return;
+      ss.budgets[tm.id] -= fee;
+      if (mode === 'sign' && ctx && ctx.done) { const nd = ctx.done(N.yrs); if (!nd) return; d = nd; }
+      if (mode === 'renew') d.contract = (d.contract ?? 1) + N.yrs;
+      if (mode === 'sign') d.contract = N.yrs;
+      d.sal = sal; d.bonus = N.bonus ? BONUS_PT : 0; d.clause = Math.round(feeOf(d) * (1.3 + 0.3 * (mode === 'raise' ? d.contract ?? 1 : N.yrs)) * 10) / 10;
+      d.moral = clampN((d.moral ?? 70) + (mode === 'raise' ? 8 : 5), 15, 100); d.askRaise = null; pendDrop('raise', d.id);
+      flash(mode === 'sign' ? `${d.name.toUpperCase()} FICHADO` : mode === 'renew' ? `${d.name.toUpperCase()} RENUEVA ${N.yrs} TEMPORADA${N.yrs > 1 ? 'S' : ''}` : `${d.name.toUpperCase()}: SUBIDA ACEPTADA`, 1600);
+      S.neg = null; await saveRoster(); await saveAll(); afterTeamsChange(); showOffice(); return;
+    }
+    if (ans === 'casi') { N.ask = Math.round(N.ask * (1.03 + 0.04 * Math.random()) * 100) / 100; N.k = 1; N.msg = `«Casi. Por ${money(N.ask)} firmo.»`; N.msgK = 'mid'; }
+    else { N.closed = true; d.noTalk = races; d.moral = clampN((d.moral ?? 70) - 4, 15, 100); N.msg = '«No. Así no.» No quiere seguir hablando hasta la próxima carrera.'; N.msgK = 'bad'; await saveRoster(); }
+    showNegotiate(d, mode, ctx);
+  };
+}
 // después de cada carrera de la temporada: dinero, progresión de pilotos y mejoras de los coches
 // ---------------- Salón de la fama: carrera de cada piloto a lo largo de las temporadas y récords de vuelta ----------------
 function famaKey(d) { return d.id + '|' + d.name; }
@@ -15621,7 +15811,9 @@ function afterSeasonRace(rec) {
   for (const tm of raceTeams()) {
     const pts = rec.resultados.filter((x) => x.team === tm.id).reduce((a, x) => a + x.points, 0);
     const sal = DATA.DRIVERS.filter((d) => d.team === tm.id).reduce((a, d) => a + salaryOf(d), 0) + jefeSalary(tm.jefe) + STAFF_K.reduce((a, k) => a + staffSalary(tm.staff && tm.staff[k]), 0);
-    const pay = DATA.DRIVERS.filter((d) => d.team === tm.id && d.pay).reduce((a, d) => a + d.pay, 0); // v1.18: lo que traen los pilotos de pago
+    const pay = DATA.DRIVERS.filter((d) => d.team === tm.id && d.pay).reduce((a, d) => a + d.pay, 0) // v1.18: lo que traen los pilotos de pago
+      - DATA.DRIVERS.filter((d) => d.team === tm.id && d.bonus).reduce((a, d) => a + d.bonus * (rec.resultados.find((x) => x.driver === d.id) || { points: 0 }).points, 0) // v1.23: bonus por puntos
+      - facUpkeep(tm.id); // v1.23: mantener las instalaciones
     const inc = (ECO.base + pts * ECO.perPt) * (tm.id === ss.manager ? difK('inc') : 1) - sal + pay; // v1.11: más base y menos por punto
     ss.budgets[tm.id] = (ss.budgets[tm.id] ?? 60) + inc;
     ss.income[tm.id] = inc;
@@ -15631,7 +15823,7 @@ function afterSeasonRace(rec) {
     if (!d || d.legend) continue;
     const ov = DATA.overall(d.stats);
     if (d.pot === undefined) d.pot = Math.min(99, ov + (d.age < 24 ? 8 : d.age < 27 ? 3 : 0));
-    if (d.age < 26 && ov < d.pot && Math.random() < 0.35 * (0.75 + 0.5 * staffK(teamById(d.team), 'ingeniero'))) {
+    if (d.age < 26 && ov < d.pot && Math.random() < 0.35 * (0.75 + 0.5 * staffK(teamById(d.team), 'ingeniero')) * (1 + 0.08 * facLvl(d.team, 'sim'))) {
       const k = rpick(['rapidas', 'lentas', 'frenada', 'consistencia', 'adelantar', 'defender', 'lluvia', 'presion', 'energia', 'salidas', 'rapidas', 'lentas', 'consistencia', 'ritmo']);
       if (d.stats[k] < 99) { d.stats[k]++; DATA.syncStats(d); news.push(`📈 ${d.name} mejora su ${STATLBL[k]} (${d.stats[k]})`); }
     }
@@ -15653,11 +15845,13 @@ function afterSeasonRace(rec) {
   if (!ss.goals) setGoals();
   updateMoral(rec, news);
   advanceParts(news);
+  facStep(news);
   devRecord();
   // v1.17: a mitad de temporada se recalcula el límite de gasto de cada uno según cómo van los coches
   { const ss2 = S.champ.season; if (ss2 && S.champ.races.length === Math.ceil(ss2.n / 2)) { devCapsUpdate(); news.push('📏 Límites de gasto revisados a mitad de temporada: los coches más lentos pueden gastar más en mejoras'); } }
   liveMarket(rec, news);
   acadProgress(news);
+  try { absencesAfterRace(rec, news); } catch (e) { console.warn('bajas', e); }
   rec.news = news;
   saveRoster();
 }
@@ -15688,7 +15882,7 @@ const devTotalLeft = (id) => Math.max(0, devCapOf(id) - devSpent(id));
 // v1.18: pilotos buenos técnicos: con uno, las mejoras salen un 8 % más baratas (con dos, un 15 %) y el reglaje se afina mejor
 const techN = (tm) => Math.min(2, DATA.DRIVERS.filter((d) => d.team === (tm && tm.id) && d.tech).length);
 const techK = (tm) => 1 - 0.075 * techN(tm);
-function devCost(tm, k, kind) { const c = upCostTm(tm, k) * (1.12 - 0.25 * staffK(tm, 'tecnico')) * techK(tm); return Math.round((kind === 'paquete' ? c * 1.6 : c * 0.45) * 10) / 10; } // v1.13: el director técnico abarata
+function devCost(tm, k, kind) { const c = upCostTm(tm, k) * (1.12 - 0.25 * staffK(tm, 'tecnico')) * techK(tm) * (1 - 0.035 * facLvl(tm.id, 'tunel')); return Math.round((kind === 'paquete' ? c * 1.6 : c * 0.45) * 10) / 10; } // v1.13: el director técnico abarata
 function devOrder(tm, k, kind) {
   const ss = S.champ.season, cost = devCost(tm, k, kind), D = devState();
   if (cost > (ss.budgets[tm.id] ?? 0) || cost > devLeft(tm.id)) return null;
@@ -15758,8 +15952,30 @@ function demand(d, tm) {
 
 // ---- mercado vivo: rumores, ofertas por tus pilotos y algún fichaje de la IA en plena temporada ----
 function liveMarket(rec, news) {
-  const ss = S.champ.season, M = ss.manager;
-  ss.offers = (ss.offers || []).filter((o) => o.until > S.champ.races.length && DATA.DRIVERS.some((d) => d.id === o.driver && d.team === M));
+  const ss = S.champ.season, M = ss.manager, races = S.champ.races.length;
+  // v1.23: respuesta a tus contraofertas: suben lo que ofrecen o se retiran
+  for (const o of ss.offers || []) if (o.counter && o.counterAt < races) {
+    const t = teamById(o.team), d = DATA.DRIVERS.find((x) => x.id === o.driver); o.counter = false;
+    if (t && d && Math.random() < 0.55 && (ss.budgets[t.id] ?? 0) > o.ask * 1.1) { o.amount = o.ask; o.until = races + 2; news.push(`📨 ${t.name} acepta pagar ${money(o.amount)} por ${d.name}: decides tú`); pendAdd({ type: 'offer', driver: d.id }); }
+    else { o.until = 0; if (t && d) news.push(`📨 ${t.name} se retira: no paga ${money(o.ask)} por ${d.name}`); }
+  }
+  ss.offers = (ss.offers || []).filter((o) => o.until > races && DATA.DRIVERS.some((d) => d.id === o.driver && d.team === M));
+  // v1.23: cláusula de salida: si un equipo rico la paga y tu piloto quiere irse (está a disgusto), se va
+  if (M && Math.random() < 0.06) {
+    const d = DATA.DRIVERS.filter((x) => x.team === M && x.clause && (x.moral ?? 70) < 50 && !x.legend && !x.me)[0];
+    const t = d && DATA.TEAMS.filter((x) => x.id !== M && raceTeams().includes(x) && (ss.budgets[x.id] ?? 0) > d.clause + 15).sort((a, c) => teamStrength(c) - teamStrength(a))[0];
+    if (d && t) { const rep2 = acceptOffer({ driver: d.id, team: t.id, amount: d.clause }); news.push(`💥 ${t.name} paga la cláusula de ${d.name} (${money(d.clause)}) y se lo lleva: estaba a disgusto${rep2 ? `. ${rep2.name} ocupa su asiento` : ''}`); afterTeamsChange(); }
+  }
+  // v1.23: renovaciones del resto (para que el mercado se mueva)
+  if (Math.random() < 0.15) {
+    const d = rpick(DATA.DRIVERS.filter((x) => x.team && x.team !== M && (x.contract ?? 1) <= 1 && !x.legend && DATA.overall(x.stats) >= 80));
+    if (d) { d.contract = (d.contract ?? 1) + 1 + Math.floor(Math.random() * 2); const t = teamById(d.team); news.push(`✍ ${d.name} renueva con ${t ? t.name : 'su equipo'} hasta ${(ss.year || 2027) + d.contract - 1}`); }
+  }
+  // v1.23: un piloto tuyo que rinde mucho y cobra poco pide una subida
+  if (M && races >= 3 && Math.random() < 0.2) {
+    const d = DATA.DRIVERS.filter((x) => x.team === M && !x.askRaise && !x.legend && !x.me && (ratingAvg(x.id) ?? 0) >= 7.4 && salaryOf(x) < drvAsk(x, teamById(M)).sal * 0.92)[0];
+    if (d) { d.askRaise = Math.round(drvAsk(d, teamById(M)).sal * 1.05 * 100) / 100; news.push(`💬 ${d.name} pide una subida a ${money(d.askRaise)} por carrera (está rindiendo muy bien)`); pendAdd({ type: 'raise', driver: d.id }); }
+  }
   // oferta por uno de tus pilotos si está rindiendo y un rico lo quiere
   // v1.18: solo pujan equipos para los que tu piloto es una mejora clara sobre su peor piloto (la nota de las carreras ayuda,
   // pero poco: antes Ferrari ofrecía dinero por Stroll y te mandaba a Leclerc por unas pocas carreras buenas)
@@ -15771,7 +15987,7 @@ function liveMarket(rec, news) {
       const bidders = DATA.TEAMS.filter((t) => t.id !== M && raceTeams().includes(t) && (ss.budgets[t.id] ?? 0) > feeOf(d) * 1.2 + 10).filter((t) => { const w = DATA.DRIVERS.filter((x) => x.team === t.id).sort((a, c) => val(a) - val(c))[0]; return w && !w.legend && val(d) >= val(w) + 3; });
       if (bidders.length) { best = d; rich = bidders.sort((a, c) => (ss.budgets[c.id] ?? 0) - (ss.budgets[a.id] ?? 0))[0]; break; }
     }
-    if (best && rich) { const amt = Math.round(feeOf(best) * (1.1 + Math.random() * 0.5) * 10) / 10; ss.offers.push({ driver: best.id, team: rich.id, amount: amt, until: S.champ.races.length + 2 }); news.push(`📨 ${rich.name} ofrece ${money(amt)} por ${best.name}: decide en la oficina (pestaña Mercado)`); }
+    if (best && rich) { const amt = Math.round(feeOf(best) * (1.1 + Math.random() * 0.5) * 10) / 10; ss.offers.push({ driver: best.id, team: rich.id, amount: amt, until: S.champ.races.length + 2 }); pendAdd({ type: 'offer', driver: best.id }); news.push(`📨 ${rich.name} ofrece ${money(amt)} por ${best.name}: decide en la oficina (pestaña Mercado)`); }
   }
   // rumores (a veces se cumplen al final de la temporada)
   if (Math.random() < 0.18) {
@@ -15835,8 +16051,85 @@ function acadCandidates() {
   if (M && !ss.scouted) { ss.scouted = true; const n = Math.round(staffK(M, 'ojeador') * 3); for (let k = 0; k < n; k++) { const d = DATA.makeDriver({ rookie: true, tier: Math.random() < staffK(M, 'ojeador') * 0.5 ? 2 : 1 }); d.pot = Math.min(99, DATA.overall(d.stats) + 10 + Math.round(staffK(M, 'ojeador') * 8)); ss.pool.push(d); } }
   return ss.pool.filter((d) => !d.legend && d.age <= 23).sort((a, c) => (c.pot || 0) - (a.pot || 0)).slice(0, 8);
 }
+// ---------------- v1.23 · Categorías menores: la cantera corre en F3 y F2 (por detrás), suma puntos de superlicencia y progresa ----------------
+const JR = { F3: { mean: 64, sd: 5, sl: [30, 25, 20, 15, 12, 9, 7, 5, 3, 2] }, F2: { mean: 72, sd: 4, sl: [40, 40, 40, 30, 20, 10, 8, 6, 4, 3] } };
+const JR_PTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], SL_NEED = 40;
+function jrOf(d) {
+  if (!d.jr) { const ov = DATA.overall(d.stats); d.jr = { cat: ov >= 72 ? 'F2' : 'F3', pts: 0, res: [], sl: ov >= 76 ? [{ y: 0, p: SL_NEED }] : ov >= 72 ? [{ y: 0, p: 20 }] : [] }; }
+  return d.jr;
+}
+const slOf = (d) => (d.jr ? d.jr.sl.reduce((a, x) => a + x.p, 0) : DATA.overall(d.stats) >= 76 ? SL_NEED : 0);
+const jrRank = (j) => (j.res.length ? Math.max(1, Math.round((j.res.reduce((a, b) => a + b, 0) / j.res.length) * 0.75)) : null);
+function juniorRace(news) {
+  const ss = S.champ.season, M = ss.manager, simL = M ? facLvl(M, 'sim') : 0, gauss = () => Math.sqrt(-2 * Math.log(Math.random() + 1e-9)) * Math.cos(2 * Math.PI * Math.random());
+  const rec = S.champ.races[S.champ.races.length - 1], where = rec ? rec.circuito : '';
+  for (const d of acad()) {
+    const j = jrOf(d), C = JR[j.cat], me = DATA.overall(d.stats) + gauss() * 3 + 0.4 * simL;
+    let pos = 1; for (let i = 0; i < 21; i++) if (C.mean + gauss() * C.sd + gauss() * 3 > me) pos++;
+    j.res.push(pos); if (j.res.length > 30) j.res.shift(); j.pts += JR_PTS[pos - 1] || 0;
+    // correr bien hace mejorar más
+    if (pos <= 3 && DATA.overall(d.stats) < (d.pot ?? 90) && Math.random() < 0.35) { const k = rpick(['rapidas', 'lentas', 'frenada', 'consistencia', 'adelantar', 'salidas']); if (d.stats[k] < 99) { d.stats[k]++; DATA.syncStats(d); } }
+    if (pos === 1) news.push(`🏆 ${d.name} gana en ${j.cat}${where ? ' (' + where + ')' : ''}`);
+    else if (pos <= 3) news.push(`🥉 ${d.name}, ${pos}.º en ${j.cat}`);
+  }
+}
+function juniorSeasonEnd(news) {
+  const ss = S.champ.season, y = ss.year || 2027;
+  for (const d of acad()) {
+    const j = jrOf(d), rk = jrRank(j);
+    if (rk) { const p = JR[j.cat].sl[rk - 1] || 0; j.sl.push({ y, p }); news.push(`🎓 ${d.name} acaba ${rk}.º en ${j.cat}${p ? ` (+${p} puntos de superlicencia: ${slOf(d)})` : ''}`); }
+    j.sl = j.sl.filter((x) => !x.y || x.y > y - 3);
+    if (j.cat === 'F3' && ((rk && rk <= 6) || DATA.overall(d.stats) >= 72)) { j.cat = 'F2'; news.push(`⬆ ${d.name} sube a la F2`); }
+    j.pts = 0; j.res = []; d.age = (d.age || 18) + 1;
+  }
+}
+// ---------------- v1.23 · Bajas: enfermedad (rara) o sanción por acumular puntos en el carné; entra el reserva ----------------
+function absencesAfterRace(rec, news) {
+  const ss = S.champ.season, M = ss.manager, next = S.champ.races.length; // índice de la próxima carrera
+  for (const x of rec.resultados) { const d = drvById(x.driver); if (!d) continue; d.lic = Math.max(0, (d.lic || 0) - 0.25) + (x.pen >= 10 ? 3 : x.pen >= 5 ? 2 : 0); }
+  for (const d of DATA.DRIVERS.filter((q) => q.team)) {
+    let why = null;
+    if ((d.lic || 0) >= 12) { why = 'sancionado una carrera por acumular 12 puntos en el carné'; d.lic = 4; }
+    else if (Math.random() < 0.006) why = 'enfermo';
+    if (!why) continue;
+    d.outNext = { race: next, why };
+    const t = teamById(d.team), sub = subFor(t);
+    if (d.team === M || why !== 'enfermo') news.push(`${why === 'enfermo' ? '🤒' : '🟥'} ${d.name} (${t ? t.name : ''}) no correrá la próxima carrera: ${why}${sub ? `. Le sustituye ${sub.name}` : ''}`);
+    if (d.team === M) pendAdd({ type: 'out', driver: d.id });
+  }
+}
+// el sustituto: tu reserva (si tiene la superlicencia) o el mejor libre
+function subFor(t) {
+  const ss = S.champ.season; if (!t) return null;
+  if (t.id === ss.manager) { const r = acad().find((q) => q.id === ss.reserve); if (r && slOf(r) >= SL_NEED) return r; }
+  return ss.pool.filter((q) => !q.legend && !q.team).sort((a, b) => DATA.overall(b.stats) - DATA.overall(a.stats))[0] || null;
+}
+// al empezar la clasificación o la carrera: se cambian los que no pueden correr
+function applySubs() {
+  if (!seasonOn() || S.raceMode === 'libre' || !S.entries) return;
+  const next = S.champ.races.length; let any = false;
+  S.entries = S.entries.map((e) => {
+    if (e.subFor) { const o = DATA.DRIVERS.find((q) => q.id === e.subFor); if (o && !(o.outNext && o.outNext.race === next)) e = { driver: o, team: e.team }; else { any = true; return e; } } // vuelve el titular
+    const d = e.driver; if (!d || !d.outNext || d.outNext.race !== next) return e;
+    const sub = subFor(e.team); if (!sub) return e;
+    any = true; sub.num = sub.num || d.num; return { driver: sub, team: e.team, subFor: d.id };
+  });
+  if (any) S.subsOn = true;
+}
+// lo que se sabe del potencial: exacto en los tuyos; en los demás, un margen (más estrecho con buen ojeador y con el tiempo en tu cantera)
+function potTxt(d) {
+  const ss = S.champ.season, M = ss && ss.manager; if (d.pot === undefined) return '';
+  if (!M || d.team === M || (d.seen || 0) >= 10) return String(d.pot);
+  const w = Math.max(0, Math.round(9 * (1 - 0.6 * staffK(teamById(M), 'ojeador'))) - Math.floor((d.seen || 0) / 2));
+  if (!w) return String(d.pot);
+  let h = 0; for (const ch of String(d.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const off = (h % (2 * w + 1)) - w, lo = Math.max(40, d.pot + off - w), hi = Math.min(99, d.pot + off + w);
+  return `${lo}–${hi}`;
+}
 function acadProgress(news) {
   const ss = S.champ.season, fp = ss.fp1;
+  for (const d of acad()) d.seen = (d.seen || 0) + 1;
+  try { juniorRace(news); } catch (e) { console.warn('cantera', e); }
   for (const d of acad()) {
     if (d.pot === undefined) d.pot = Math.min(99, DATA.overall(d.stats) + 8);
     const rolls = d.id === fp ? 3 : 1;
@@ -16229,7 +16522,7 @@ function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 function setupEst(T, tm, id) {
   const tr = setupTrue(T), ov = Math.round(Math.max(tm && tm.jefe ? DATA.stratOverall(tm.jefe) : 70, staffLvl(tm, 'ingeniero'))); // v1.13: el ingeniero de pista también afina
   const yr = (S.champ && S.champ.season && S.champ.season.year) || 0, rng = SIM.makeRng(hashStr((tm ? tm.id : '') + '|' + id + '|' + yr));
-  const err = Math.max(0, (96 - ov) / 100) * 30 * (1 - 0.25 * techN(tm));
+  const err = Math.max(0, (96 - ov) / 100) * 30 * (1 - 0.25 * techN(tm)) * (1 - 0.07 * facLvl(tm.id, 'sim')); // v1.23: con simulador, más fino
   return { a: SIM.clamp(tr.a + (rng() * 2 - 1) * err, 5, 98), u: SIM.clamp(tr.u + (rng() * 2 - 1) * err, 5, 95), aW: SIM.clamp(tr.aW + (rng() * 2 - 1) * err, 5, 99), uW: SIM.clamp(tr.uW + (rng() * 2 - 1) * err, 3, 95), ov };
 }
 // cuánta lluvia se espera (0 seco … 1 lluvia toda la carrera), según la previsión
@@ -16870,6 +17163,8 @@ function runOffSeason() {
   const ss = S.champ.season, news = [];
   sponsorSeasonEnd(news);
   staffOffSeason(news);
+  try { facOffSeason(news); } catch (e) { /* sin instalaciones */ }
+  try { juniorSeasonEnd(news); } catch (e) { console.warn('cantera', e); }
   const st = standings();
   // v1.11: premio de la F1 según la posición en escuderías (bastante repartido, para que los de atrás puedan remontar)
   st.teams.forEach((x, i) => { const p = ecoPrize(i + 1, st.teams.length, ss.n); ss.budgets[x.id] = (ss.budgets[x.id] ?? 0) + p; if (x.id === ss.manager) news.push(`💰 Premio de la F1 por acabar ${i + 1}.º en escuderías: ${money(p)}`); });
@@ -17096,6 +17391,8 @@ function statsDetails(d) {
   return `<details class="of-st"><summary>📊 Stats</summary><div class="bars">${STAT_NAMES.map(([k, l]) => d.stats[k] === undefined ? '' : `<span>${l}</span><div class="bar"><i style="width:${d.stats[k]}%"></i></div><span class="v">${d.stats[k]}</span>`).join('')}</div></details>`;
 }
 // oficina del director (modo manager)
+// v1.23: las explicaciones largas, plegadas (se abren tocando «ⓘ Cómo funciona»)
+function foldNotes(html) { return html.replace(/<div class="note">([\s\S]*?)<\/div>/g, (m, t) => (t.replace(/<[^>]+>/g, '').length > 150 ? `<details class="hlp"><summary>ⓘ Cómo funciona</summary><div class="note">${t}</div></details>` : m)); }
 function showOffice() {
   const ss = S.champ.season, tm = teamById(ss.manager);
   if (!tm) return;
@@ -17106,13 +17403,21 @@ function showOffice() {
   // v1.8.1: oficina en pantalla completa con el estilo del muro: arriba el dinero y el objetivo; debajo, una pestaña cada vez
   const tab = S.ofTab || 'coche';
   const prevBody = $('#mbox.pw-screen .of-sec') ? $('#mbox .pw-body').scrollTop : null, prevTab = S.ofTabShown;
-  const drvCard = (d, extra) => { const ov = DATA.overall(d.stats); return `<div class="of-card"><div class="of-ch"><span class="fl">${DATA.flagOf(d.nat)}</span><div><b>${esc(d.name)}</b> ${rarBadge(d)}<small>${d.age} años${d.pot ? ' · potencial ' + d.pot : ''} · sueldo ${money(salaryOf(d))}/carrera${ratingAvg(d.id) !== null ? ' · nota media ' + String(ratingAvg(d.id)).replace('.', ',') : ''}</small></div><span class="of-ov">${ov}</span></div>
+  const drvCard = (d, extra) => { const ov = DATA.overall(d.stats); return `<div class="of-card"><div class="of-ch"><span class="fl">${DATA.flagOf(d.nat)}</span><div><b>${esc(d.name)}</b> ${rarBadge(d)}<small>${d.age} años${d.pot ? ' · potencial ' + potTxt(d) : ''} · sueldo ${money(salaryOf(d))}/carrera${ratingAvg(d.id) !== null ? ' · nota media ' + String(ratingAvg(d.id)).replace('.', ',') : ''}</small></div><span class="of-ov">${ov}</span></div>
     ${d.team ? `<div class="of-cm">${moralTxt(d.moral)} (${d.moral ?? 70}) · contrato: ${(d.contract ?? 1) <= 1 ? '<b style="color:var(--gold)">acaba esta temporada</b>' : `${d.contract} temporadas`}</div>` : ''}
     <div class="traits">${traitChips(d, true)}${d.pay ? `<span class="trait" title="Sus patrocinadores pagan por cada carrera que corre">💰 Trae ${money(d.pay)}/carrera</span>` : ''}${d.tech ? '<span class="trait" title="Ayuda a los ingenieros: mejoras más baratas y reglaje más fino">🧠 Buen técnico</span>' : ''}</div>${statsDetails(d)}${extra || ''}</div>`; };
   const jefeCard = (j, extra) => `<div class="of-card"><div class="of-ch"><span class="fl">🎧</span><div>${jefeBadge(j)}<small>sueldo ${money(jefeSalary(j))}/carrera</small></div><span class="of-ov">${DATA.stratOverall(j)}</span></div>${jefeBars(j)}${extra || ''}</div>`;
   const inc = ss.income[tm.id], goal = ss.goals && ss.goals[tm.id], pos = standings().teams.findIndex((x) => x.id === tm.id) + 1;
   const offers = (ss.offers || []).filter((o) => DATA.DRIVERS.some((d) => d.id === o.driver && d.team === tm.id));
-  const tabs = [...(ss.sponsor ? [] : [['patro', '💼 Patrocinio ⚠']]), ['coche', '🔧 Desarrollo'], ['pilotos', '🏎 Pilotos'], ['cantera', `🧑‍🎓 Cantera (${acad().length})`], ['muro', '🎧 Muro'], ['personal', '👥 Personal'], ['mercado', `🔁 Mercado${offers.length ? ' · 📨' : ''}`], ...(ss.sponsor ? [['patro', '💼 Patrocinio']] : []), ['leyendas', `⭐ Leyendas (${nLegOn()})`]];
+  // v1.23: cuatro apartados (antes ocho pestañas sueltas) y dentro, sus pestañas
+  const groups = [
+    ['coche', '🔧 Coche', [['coche', 'Desarrollo'], ['fac', '🏭 Instalaciones']]],
+    ['pil', '🏎 Pilotos', [['pilotos', 'Tus pilotos'], ['mercado', `🔁 Mercado${offers.length ? ' · 📨' : ''}`], ['cantera', `🧑‍🎓 Cantera (${acad().length})`], ['leyendas', `⭐ Leyendas (${nLegOn()})`]]],
+    ['eq', '👥 Equipo', [['personal', 'Personal'], ['muro', '🎧 Muro']]],
+    ['din', `💶 Dinero${ss.sponsor ? '' : ' ⚠'}`, [['patro', `💼 Patrocinio${ss.sponsor ? '' : ' ⚠'}`]]],
+  ];
+  const grp = groups.find((g) => g[2].some(([k]) => k === tab)) || groups[0];
+  const tabs = grp[2];
   let sec = '';
   if (tab === 'coche') {
     // v1.10: desarrollo durante la temporada: piezas (+1, a la siguiente) o paquetes (+3, tardan y arriesgan), con límite de gasto
@@ -17141,6 +17446,7 @@ function showOffice() {
       <h3>Cómo va cada coche</h3>${devChartSVG(tm.id)}`;
   }
   else if (tab === 'personal') sec = staffHTML(tm, b);
+  else if (tab === 'fac') { sec = facHTML(tm, b); pendDrop('fac'); }
   else if (tab === 'patro') {
     sec = ss.sponsor ? `<div class="of-card offer"><b>💼 ${esc(ss.sponsor.name)}</b><div class="muted" style="font-size:13px;margin-top:4px">${sponsorTxt(ss.sponsor)}</div></div><div class="note">El patrocinador se elige al empezar cada temporada; las ofertas son mejores cuanto mejor es tu equipo.</div>`
       : `<div class="note">Elige patrocinador para esta temporada. Cuanto mejor es tu equipo, mejores ofertas. (Nombres reales, solo como texto.)</div><div class="of-list">${sponsorOffers().map((o, i) => `<div class="of-card"><b>💼 ${esc(o.name)}</b><div class="muted" style="font-size:13px;margin:4px 0 8px">${sponsorTxt(o)}</div><div class="of-act"><button class="btn ghost" data-spons="${i}">Firmar con ${esc(o.name)}</button></div></div>`).join('')}</div>`;
@@ -17150,19 +17456,22 @@ function showOffice() {
       <div class="of-list">${sponsor2Offers().map((o, i) => { const on = s2.some((x) => x.name === o.name); return `<div class="of-card${on ? ' offer' : ''}"><b>🏷 ${esc(o.name)}</b><div class="muted" style="font-size:13px;margin:4px 0 8px">${o.perRace ? money(o.perRace) + ' por carrera' : money(o.perPt) + ' por punto'}</div>${on ? '<div class="muted">✓ Firmado</div>' : `<div class="of-act"><button class="btn ghost" data-spons2="${i}" ${s2.length >= 2 ? 'disabled' : ''}>Firmar</button></div>`}</div>`; }).join('')}</div>`;
   }
   else if (tab === 'cantera') {
+    // v1.23: la cantera corre en F3 o F2 (por detrás), suma superlicencia (hacen falta 40 para subir a la F1) y uno puede ser tu reserva
     const A = acad(), cands = acadCandidates();
-    sec = `<div class="note">Jóvenes que fichas barato para tu cantera (hasta ${ACAD_MAX}). Mejoran un poco cada carrera y mucho más si ruedan en los libres (uno por carrera). Cuando estén listos, súbelos al equipo.</div>
-      ${A.length ? `<div class="of-list">${A.map((d) => drvCard(d, `<div class="of-bar ac-pot"><i style="width:${Math.round((DATA.overall(d.stats) / Math.max(1, d.pot || 90)) * 100)}%"></i></div><div class="of-act"><button class="btn ghost ${ss.fp1 === d.id ? 'on' : ''}" data-acfp="${d.id}">${ss.fp1 === d.id ? '✓ Rueda en los libres' : 'Rodar en los libres'}</button>${mine.map((m) => `<button class="btn ghost" data-acup="${d.id}" data-out="${m.id}">Subir por ${esc(m.short)}</button>`).join('')}<button class="btn ghost" data-acrel="${d.id}">Dejar ir</button></div>`)).join('')}</div>` : '<div class="muted">Tu cantera está vacía.</div>'}
+    const jrTxt = (d) => { const j = jrOf(d), rk = jrRank(j), sl = slOf(d); return `<div class="of-cm">🏎 <b>${j.cat}</b>${j.res.length ? ` · ${j.res.length} carreras · ${j.pts} pts · ~${rk}.º del campeonato · últimas: ${j.res.slice(-5).map((p) => p + '.º').join(', ')}` : ' · aún no ha corrido'} · superlicencia <b style="color:${sl >= SL_NEED ? 'var(--go)' : 'var(--gold)'}">${sl}/${SL_NEED}</b>${ss.reserve === d.id ? ' · 🦺 <b>tu reserva</b>' : ''}</div>`; };
+    sec = `<div class="note">Jóvenes que fichas barato (hasta ${ACAD_MAX}). Corren en F3 o F2 cada fin de semana (no se ven, solo los resultados): ya saben conducir, pero sus stats son peores y van progresando, más si ganan o ruedan en los libres. Para subir a la F1 necesitan ${SL_NEED} puntos de superlicencia (se ganan acabando arriba en F2 o F3). Uno puede ser tu piloto reserva: si uno de los tuyos se pone enfermo o le sancionan una carrera, corre él.</div>
+      ${A.length ? `<div class="of-list">${A.map((d) => drvCard(d, `${jrTxt(d)}<div class="of-bar ac-pot"><i style="width:${Math.round((DATA.overall(d.stats) / Math.max(1, d.pot || 90)) * 100)}%"></i></div><div class="of-act"><button class="btn ghost ${ss.fp1 === d.id ? 'on' : ''}" data-acfp="${d.id}">${ss.fp1 === d.id ? '✓ Rueda en los libres' : 'Rodar en los libres'}</button><button class="btn ghost ${ss.reserve === d.id ? 'on' : ''}" data-acres="${d.id}" title="Corre si uno de los tuyos no puede (con la superlicencia)">${ss.reserve === d.id ? '✓ Reserva' : '🦺 Hacer reserva'}</button>${slOf(d) >= SL_NEED ? mine.map((m) => `<button class="btn ghost" data-acup="${d.id}" data-out="${m.id}">Subir por ${esc(m.short)}</button>`).join('') : `<span class="muted">Le faltan ${SL_NEED - slOf(d)} puntos de superlicencia para la F1</span>`}<button class="btn ghost" data-acrel="${d.id}">Dejar ir</button></div>`)).join('')}</div>` : '<div class="muted">Tu cantera está vacía.</div>'}
+      ${A.length && !A.some((d) => d.id === ss.reserve) ? '<div class="note">Sin reserva: si uno de los tuyos no puede correr, entra el mejor piloto libre.</div>' : ''}
       <h3>Jóvenes en el mercado</h3>
       <div class="of-list">${cands.map((d) => drvCard(d, `<div class="of-act"><button class="btn ghost" data-acsign="${d.id}" ${A.length >= ACAD_MAX || acadFee(d) > b ? 'disabled' : ''}>A la cantera · ${money(acadFee(d))}</button></div>`)).join('') || '<div class="muted">No hay jóvenes libres ahora mismo.</div>'}</div>`;
   }
-  else if (tab === 'pilotos') sec = `<div class="note">Puedes cambiar de piloto en cualquier momento de la temporada: en «🔁 Mercado» eliges al nuevo y a cuál de los tuyos sustituye (el que sale pasa al mercado).</div><div class="of-list">${mine.map((d) => drvCard(d, `<div class="of-act">${(d.contract ?? 1) <= 1 ? `<button class="btn ghost" data-renew="${d.id}" ${renewCost(d) > b ? 'disabled' : ''}>Renovar 2 temporadas · ${money(renewCost(d))}</button>` : ''}<button class="btn ghost" data-oftab="mercado">🔁 Sustituirlo</button></div>`)).join('')}</div>
+  else if (tab === 'pilotos') sec = `<div class="note">Puedes cambiar de piloto en cualquier momento de la temporada: en «🔁 Mercado» eliges al nuevo y a cuál de los tuyos sustituye (el que sale pasa al mercado).</div><div class="of-list">${mine.map((d) => drvCard(d, `<div class="of-act">${(d.contract ?? 1) <= 1 ? `<button class="btn ghost" data-renew="${d.id}" ${renewCost(d) > b ? 'disabled' : ''}>Negociar renovación</button>` : ''}<button class="btn ghost" data-oftab="mercado">🔁 Sustituirlo</button></div>`)).join('')}</div>
     <h3>El resto de la parrilla</h3><div class="note">Para comparar: media, nota en carrera y stats de cada uno (toca «📊 Stats»).</div>
     <div class="of-list">${raceTeams().filter((t) => t.id !== tm.id).map((t) => DATA.DRIVERS.filter((d) => d.team === t.id).map((d) => drvCard(d, `<div class="muted" style="font-size:12px">${esc(t.name)}</div>`)).join('')).join('')}</div>`;
   else if (tab === 'muro') sec = `<h3>Tu jefe de estrategia</h3><div class="of-list">${tm.jefe ? jefeCard(tm.jefe) : '<div class="muted">Sin jefe de estrategia.</div>'}</div>
     <h3>Estrategas libres</h3><div class="of-list">${(ss.staffPool || []).map((j, i) => jefeCard(j, `<div class="of-act"><button class="btn ghost" data-jefe="${i}" ${jefeFee(j) > b ? 'disabled' : ''}>Fichar · ${money(jefeFee(j))}</button></div>`)).join('') || '<div class="muted">No hay estrategas libres ahora mismo.</div>'}</div>
     <div class="note">Los estrategas legendarios (Brawn, Newey…) están en la pestaña Leyendas.</div>`;
-  else if (tab === 'mercado') sec = `${offers.map((o) => { const d = DATA.DRIVERS.find((x) => x.id === o.driver), t = teamById(o.team); return d && t ? `<div class="of-card offer"><b>📨 ${esc(t.name)} ofrece ${money(o.amount)} por ${esc(d.name)}</b><div class="muted" style="font-size:12px">Si aceptas, ${esc(t.name)} te manda a su peor piloto para el asiento. La oferta caduca en ${Math.max(1, o.until - S.champ.races.length)} carrera(s).</div><div class="of-act"><button class="btn ghost" data-offer="${o.driver}|1">Aceptar</button><button class="btn ghost" data-offer="${o.driver}|0">Rechazar</button></div></div>` : ''; }).join('')}
+  else if (tab === 'mercado') sec = `${offers.map((o) => { const d = DATA.DRIVERS.find((x) => x.id === o.driver), t = teamById(o.team); return d && t ? `<div class="of-card offer"><b>📨 ${esc(t.name)} ofrece ${money(o.amount)} por ${esc(d.name)}</b><div class="muted" style="font-size:12px">Si aceptas, ${esc(t.name)} te manda a su peor piloto para el asiento. La oferta caduca en ${Math.max(1, o.until - S.champ.races.length)} carrera(s).</div><div class="of-act">${o.counter ? `<span class="muted">Les has pedido ${money(o.ask)}: contestan tras la próxima carrera</span>` : `<button class="btn ghost" data-offer="${o.driver}|1">Aceptar</button><button class="btn ghost" data-offer="${o.driver}|2" title="Pedir un 25 % más: pueden aceptar o retirarse">Pedir ${money(Math.round(o.amount * 1.25 * 10) / 10)}</button><button class="btn ghost" data-offer="${o.driver}|0">Rechazar</button>`}</div></div>` : ''; }).join('')}
     <div class="note">Ordenados por media. Los buenos piden más para venir a un equipo flojo y algunas estrellas ni se lo plantean. El nuevo ocupa el asiento del piloto que elijas y el otro pasa al mercado.</div>
     <div class="of-list">${ss.pool.map((d, i) => [d, i]).sort((a, c) => DATA.overall(c[0].stats) - DATA.overall(a[0].stats)).map(([d, i]) => { const dm = demand(d, tm); return drvCard(d, dm.refuse ? '<div class="of-act"><span class="muted">🙅 No quiere venir a un equipo de la mitad baja</span></div>' : `<div class="of-act">${mine.map((m) => `<button class="btn ghost" data-sign="${i}" data-out="${m.id}" ${dm.fee > b ? 'disabled' : ''}>Por ${esc(m.short)} · ${money(dm.fee)}</button>`).join('')}${dm.k > 1.05 ? '<span class="muted" style="font-size:11px">pide más por venir a un equipo flojo</span>' : ''}</div>`); }).join('')}</div>`;
   else sec = officeLegendsHTML(tm, b, mine);
@@ -17176,8 +17485,9 @@ function showOffice() {
         <div class="of-earn">Se gana ${money(ECO.base)} por carrera más ${money(ECO.perPt)} por punto, y al final de la temporada un premio según el puesto en escuderías (de ${money(ecoPrize(raceTeams().length, raceTeams().length, ss.n))} el último a ${money(ecoPrize(1, raceTeams().length, ss.n))} el primero).</div>
       </div>
       ${S.ofNote ? `<div class="note of-note">${esc(S.ofNote)}</div>` : ''}
-      <div class="pw-chips of-tabs of-wrap">${tabs.map(([k, l]) => `<button class="pw-chip ${tab === k ? 'on' : ''}" data-oftab="${k}">${l}</button>`).join('')}</div>
-      <div class="of-sec">${sec}</div>
+      <div class="of-groups">${groups.map(([g, l, sub]) => `<button class="of-g ${grp[0] === g ? 'on' : ''}" data-oftab="${sub[0][0]}">${l}</button>`).join('')}</div>
+      ${tabs.length > 1 ? `<div class="pw-chips of-tabs of-wrap">${tabs.map(([k, l]) => `<button class="pw-chip ${tab === k ? 'on' : ''}" data-oftab="${k}">${l}</button>`).join('')}</div>` : ''}
+      <div class="of-sec">${foldNotes(sec)}</div>
     </div>
     <div class="pw-bottom"><button class="pw-go" id="ofGo">Listo · preparar la carrera</button></div>`);
   $('#mbox').classList.add('pw-screen');
@@ -17194,11 +17504,15 @@ function showOffice() {
   $$('#mbox [data-next]').forEach((x) => (x.onclick = async () => { if (devNext(tm, +x.dataset.next)) flash('INVERTIDO EN EL COCHE NUEVO', 1200); await saveAll(); showOffice(); }));
   $$('#mbox [data-offer]').forEach((x) => (x.onclick = async () => {
     const [id, yes] = x.dataset.offer.split('|'), o = (ss.offers || []).find((q) => q.driver === id); if (!o) return;
+    pendDrop('offer', id);
+    if (yes === '2') { o.counter = true; o.ask = Math.round(o.amount * 1.25 * 10) / 10; o.counterAt = S.champ.races.length; o.until = Math.max(o.until, S.champ.races.length + 2); S.ofNote = `Les pides ${money(o.ask)}: contestarán tras la próxima carrera`; await saveAll(); showOffice(); return; }
     if (yes === '1') { const rep = acceptOffer(o); S.ofNote = `💰 Vendido por ${money(o.amount)}${rep ? '. ' + rep.name + ' ocupa su asiento' : ''}`; }
     else { ss.offers = ss.offers.filter((q) => q !== o); const d = DATA.DRIVERS.find((q) => q.id === id); if (d) d.moral = clampN((d.moral ?? 70) - 4, 15, 100); }
     await saveRoster(); await saveAll(); afterTeamsChange(); showOffice();
   }));
   $$('#mbox [data-acsign]').forEach((x) => (x.onclick = async () => { const d = ss.pool.find((q) => q.id === x.dataset.acsign); if (!d || acad().length >= ACAD_MAX || acadFee(d) > ss.budgets[tm.id]) return; ss.budgets[tm.id] -= acadFee(d); ss.pool = ss.pool.filter((q) => q !== d); d.team = null; acad().push(d); flash(`${d.name.toUpperCase()} A LA CANTERA`, 1200); await saveAll(); showOffice(); }));
+  $$('#mbox [data-acres]').forEach((x) => (x.onclick = async () => { ss.reserve = ss.reserve === x.dataset.acres ? null : x.dataset.acres; await saveAll(); showOffice(); }));
+  $$('#mbox [data-fac]').forEach((x) => (x.onclick = async () => { const f = facAll()[tm.id], k = x.dataset.fac, l = f[k] || 0, c = FAC_COST[l + 1]; if (f.build || !c || c > ss.budgets[tm.id]) return; ss.budgets[tm.id] -= c; f.build = { k, left: FAC_BUILD }; flash(`🏗 OBRA EN MARCHA: ${FAC[k].name.toUpperCase()} NIVEL ${l + 1} EN ${FAC_BUILD} CARRERAS`, 1600); await saveAll(); showOffice(); }));
   $$('#mbox [data-acfp]').forEach((x) => (x.onclick = async () => { ss.fp1 = ss.fp1 === x.dataset.acfp ? null : x.dataset.acfp; await saveAll(); showOffice(); }));
   $$('#mbox [data-acrel]').forEach((x) => (x.onclick = async () => { const d = acad().find((q) => q.id === x.dataset.acrel); if (!d) return; ss.academy = acad().filter((q) => q !== d); ss.pool.push(d); await saveAll(); showOffice(); }));
   $$('#mbox [data-acup]').forEach((x) => (x.onclick = async () => {
@@ -17221,6 +17535,7 @@ function showOffice() {
   }));
   $$('#mbox [data-renew]').forEach((x) => (x.onclick = async () => {
     const d = DATA.DRIVERS.find((y) => y.id === x.dataset.renew); if (!d) return;
+    if ((d.moral ?? 70) >= 35) { showNegotiate(d, 'renew'); return; } // v1.23: se negocia
     const cost = renewCost(d); if (cost > ss.budgets[tm.id]) return;
     if ((d.moral ?? 70) < 35) { flash(`${d.short} NO QUIERE RENOVAR: ESTÁ DESCONTENTO`, 1800); return; }
     ss.budgets[tm.id] -= cost; d.contract = 3; d.moral = clampN((d.moral ?? 70) + 5, 15, 100);
@@ -17238,22 +17553,24 @@ function showOffice() {
     await saveRoster(); await saveAll(); showOffice();
   }));
   $$('#mbox [data-sign]').forEach((x) => (x.onclick = async () => {
-    const nd = ss.pool[+x.dataset.sign], out = DATA.DRIVERS.find((d) => d.id === x.dataset.out);
-    if (!nd || !out) return;
-    const dm = demand(nd, tm);
-    if (dm.refuse || dm.fee > ss.budgets[tm.id]) return;
-    ss.budgets[tm.id] -= dm.fee;
-    ss.pool.splice(+x.dataset.sign, 1);
+    const nd0 = ss.pool[+x.dataset.sign], out0 = DATA.DRIVERS.find((d) => d.id === x.dataset.out);
+    if (!nd0 || !out0) return;
+    const dm0 = demand(nd0, tm);
+    if (dm0.refuse || dm0.fee > ss.budgets[tm.id]) return;
+    // v1.23: primero se negocia; al aceptar se hace el fichaje (el traspaso lo cobra la negociación)
+    showNegotiate(nd0, 'sign', { done: (yrs) => {
+    const nd = nd0, out = out0, i0 = ss.pool.indexOf(nd); if (i0 < 0 || !DATA.DRIVERS.includes(out)) return null;
+    ss.pool.splice(i0, 1);
     const k = DATA.DRIVERS.indexOf(out);
     // el nuevo ocupa el asiento; el que se va pasa al mercado y conserva sus puntos de la temporada
-    nd.team = tm.id; nd.num = out.num; nd.contract = 2; nd.moral = 78;
+    nd.team = tm.id; nd.num = out.num; nd.contract = yrs; nd.moral = 78;
     if (DATA.DRIVERS.some((d) => d.id === nd.id)) nd.id = 'g' + Date.now().toString(36);
     DATA.DRIVERS[k] = nd;
     uniqShort(nd);
-    out.team = null;
+    out.team = null; out.sal = 0;
     if (out.legend) legLeaves(out); else ss.pool.push(out);
-    flash(`${nd.name.toUpperCase()} FICHADO`, 1400);
-    await saveRoster(); await saveAll(); afterTeamsChange(); showOffice();
+    return nd;
+    } });
   }));
 }
 // órdenes en carrera a los pilotos propios
