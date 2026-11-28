@@ -1,5 +1,5 @@
-// CarrerasLab 1.23: funciona sin conexión. Abre lo guardado al momento y, si hay internet, baja la versión nueva para la próxima vez.
-const CACHE = 'carreraslab-1.23';
+// CarrerasLab 1.24: funciona sin conexión. Abre lo guardado al momento y, si hay internet, baja la versión nueva para la próxima vez.
+const CACHE = 'carreraslab-1.24';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting())); }); // sin la caché del navegador: siempre la versión recién subida
 self.addEventListener('notificationclick', (e) => { e.notification.close(); e.waitUntil(self.clients.matchAll({ type: 'window' }).then((ws) => (ws.length ? ws[0].focus() : self.clients.openWindow('./')))); }); // v1.22: tocar el aviso de la escuela abre el juego
